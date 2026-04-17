@@ -223,19 +223,26 @@ def build_server() -> FastMCP:
 
     @mcp.tool(
         description=(
-            "Append a free-text note to an existing idea. Does not mutate the idea content."
+            "Append a free-text note to an existing idea. Does not mutate the idea content. "
+            "Optional `kind` labels the note semantically — recommended values: "
+            "'confirmation', 'counterexample', 'observation', 'follow-up', 'question', "
+            "'correction'. Leave unset for uncategorized notes."
         )
     )
     def annotate(
         id: str,  # noqa: A002
         content: str,
+        kind: str | None = None,
         actor: str | None = None,
         originator: str | None = None,
         ctx: Context | None = None,
     ) -> dict:
         c, aid, _, _ = _resolve(actor, None, ctx)
         return annotate_idea(
-            c, AnnotateInput(id=id, content=content, actor=aid, originator=originator)
+            c,
+            AnnotateInput(
+                id=id, content=content, kind=kind, actor=aid, originator=originator
+            ),
         ).model_dump()
 
     @mcp.tool(

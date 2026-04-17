@@ -14,11 +14,13 @@ class AnnotateInput(BaseModel):
     content: str = Field(..., min_length=1)
     actor: str
     originator: str | None = None
+    kind: str | None = None
 
 
 class AnnotateOutput(BaseModel):
     note_id: str
     idea_id: str
+    kind: str | None
     created_at: str
 
 
@@ -35,7 +37,17 @@ def annotate_idea(conn: sqlite3.Connection, input_: AnnotateInput) -> AnnotateOu
     conn.execute(
         "INSERT INTO idea_note "
         "(id, idea_id, kind, content, actor_id, originator_id, created_at) "
-        "VALUES (?, ?, NULL, ?, ?, ?, ?)",
-        (note_id, input_.id, input_.content, input_.actor, input_.originator, now),
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            note_id,
+            input_.id,
+            input_.kind,
+            input_.content,
+            input_.actor,
+            input_.originator,
+            now,
+        ),
     )
-    return AnnotateOutput(note_id=note_id, idea_id=input_.id, created_at=now)
+    return AnnotateOutput(
+        note_id=note_id, idea_id=input_.id, kind=input_.kind, created_at=now
+    )

@@ -15,6 +15,23 @@ def test_annotate_appends(conn: sqlite3.Connection) -> None:
     b = annotate_idea(conn, AnnotateInput(id=cap.id, content="note2", actor="human:m"))
     assert a.idea_id == cap.id
     assert a.note_id != b.note_id
+    assert a.kind is None
+
+
+def test_annotate_accepts_kind(conn: sqlite3.Connection) -> None:
+    resolve_actor(conn, explicit="human:m", client_info_name=None)
+    cap = capture_idea(conn, CaptureInput(content="base", actor="human:m", scope="global"))
+    a = annotate_idea(
+        conn,
+        AnnotateInput(
+            id=cap.id, content="disproven by X", actor="human:m", kind="counterexample"
+        ),
+    )
+    assert a.kind == "counterexample"
+    row = conn.execute(
+        "SELECT kind FROM idea_note WHERE id = ?", (a.note_id,)
+    ).fetchone()
+    assert row[0] == "counterexample"
 
 
 def test_annotate_unknown_raises(conn: sqlite3.Connection) -> None:

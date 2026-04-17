@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ideahub_mcp.util.clock import utcnow_iso
+from ideahub_mcp.util.coerce import coerce_str_list
 from ideahub_mcp.util.ids import new_ulid
 
 
@@ -16,6 +17,11 @@ class CaptureInput(BaseModel):
     originator: str | None = None
     tags: list[str] = Field(default_factory=list)
     actor_created: bool = False
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _coerce_tags(cls, v: object) -> list[str]:
+        return coerce_str_list(v)
 
 
 class CaptureOutput(BaseModel):

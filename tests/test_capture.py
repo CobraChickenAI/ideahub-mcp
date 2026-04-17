@@ -30,6 +30,31 @@ def test_capture_idempotent_within_window(conn: sqlite3.Connection) -> None:
     assert a.id == b.id
 
 
+def test_capture_accepts_json_stringified_tags(conn: sqlite3.Connection) -> None:
+    _seed_actor(conn)
+    # Simulates Raycast's local-agent-mode bridge which stringifies list params.
+    out = capture_idea(
+        conn,
+        CaptureInput.model_validate(
+            {
+                "content": "stringified-tags",
+                "actor": "human:michael",
+                "scope": "global",
+                "tags": '["mcp", "raycast"]',
+            }
+        ),
+    )
+    assert out.id
+    # Re-capture with real list form — tags should be suggested back.
+    out2 = capture_idea(
+        conn,
+        CaptureInput(
+            content="another mcp note", actor="human:michael", scope="global"
+        ),
+    )
+    assert "mcp" in out2.suggested_tags
+
+
 def test_capture_echoes_actor_created(conn: sqlite3.Connection) -> None:
     _seed_actor(conn)
     out = capture_idea(

@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from ideahub_mcp.util.coerce import coerce_str_list
 
 
 class ListInput(BaseModel):
@@ -16,6 +18,11 @@ class ListInput(BaseModel):
     until: str | None = None
     limit: int = 50
     include_archived: bool = False
+
+    @field_validator("tags_any", "tags_all", mode="before")
+    @classmethod
+    def _coerce_tag_list(cls, v: object) -> list[str]:
+        return coerce_str_list(v)
 
 
 class ListItem(BaseModel):
