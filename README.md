@@ -1,19 +1,74 @@
-# <span data-proof="authored" data-by="ai:claude">ideahub-mcp</span>
+# ideahub-mcp
 
-<span data-proof="authored" data-by="ai:claude">An agent-first MCP server for capturing and recalling ideas — the agent's and their human's.</span>
+An agent-first [MCP](https://modelcontextprotocol.io) server for capturing and recalling ideas — the agent's and their human's.
 
-<span data-proof="authored" data-by="ai:claude">The primary user is a model. See</span> <span data-proof="authored" data-by="ai:claude">`docs/design.md`</span> <span data-proof="authored" data-by="ai:claude">for principles.</span>
+The primary user is a model. Tools are short, imperative, example-laden; errors carry a repair path; scope and actor resolve from context so the agent doesn't have to ask.
 
-## <span data-proof="authored" data-by="ai:claude">Usage</span>
+## Tools
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTgsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
-uv run ideahub-mcp
+| Tool | Purpose |
+| --- | --- |
+| `capture` | Write a new idea. Idempotent within 5s on identical content. |
+| `dump` | Text-blob summary of the scoped corpus under a token budget. |
+| `search` | FTS5 + bm25 ranked search with snippets. |
+| `list` | Filter ideas by scope, actor, tags, date range. |
+| `get` | Full detail for one idea, with notes and outbound links. |
+| `related` | Nearest neighbors by tag overlap → shared originator → recency. |
+| `annotate` | Append a free-text note to an idea without mutating it. |
+| `archive` | Hide an idea; write a typed `archive` note with reason. |
+| `link` | Connect two ideas (`related`, `supersedes`, `evolved_from`, `duplicate`). |
+| `recognize` | Inspect the actor table. |
+
+## Install
+
+```bash
+uvx ideahub-mcp        # try it
+uv tool install ideahub-mcp   # keep it around
 ```
 
-<span data-proof="authored" data-by="ai:claude">Configured via environment:</span>
+## Claude Code
 
-* <span data-proof="authored" data-by="ai:claude">`IDEAHUB_MCP_HOME`</span> <span data-proof="authored" data-by="ai:claude">— data directory (default</span> <span data-proof="authored" data-by="ai:claude">`~/.ideahub-mcp/`)</span>
+Add to `~/.claude/settings.json`:
 
-* <span data-proof="authored" data-by="ai:claude">`IDEAHUB_ACTOR`</span> <span data-proof="authored" data-by="ai:claude">— actor fallback (e.g.</span> <span data-proof="authored" data-by="ai:claude">`human:michael`)</span>
+```json
+{
+  "mcpServers": {
+    "ideahub": {
+      "command": "uvx",
+      "args": ["ideahub-mcp"],
+      "env": {
+        "IDEAHUB_MCP_HOME": "/Users/you/.ideahub-mcp",
+        "IDEAHUB_ACTOR": "human:you"
+      }
+    }
+  }
+}
+```
 
-* <span data-proof="authored" data-by="ai:claude">`IDEAHUB_SCOPE`</span> <span data-proof="authored" data-by="ai:claude">— scope fallback (e.g.</span> <span data-proof="authored" data-by="ai:claude">`global`)</span>
+## Configuration
+
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `IDEAHUB_MCP_HOME` | `~/.ideahub-mcp/` | Data directory (SQLite store, logs, backups). |
+| `IDEAHUB_ACTOR` | — | Fallback actor id (`human:you` or `agent:name`). |
+| `IDEAHUB_SCOPE` | — | Fallback scope when cwd isn't a git repo. |
+
+Actor resolution: explicit arg → MCP `clientInfo.name` → `IDEAHUB_ACTOR` → error.
+Scope resolution: explicit arg → `IDEAHUB_SCOPE` → `repo:<git-toplevel>` → `global`.
+
+## Storage
+
+One SQLite file with WAL, FTS5, and hand-rolled migrations. No ORM. Daily snapshots to `$IDEAHUB_MCP_HOME/backups/` with 14-day retention.
+
+## Develop
+
+```bash
+uv sync --dev
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+## License
+
+MIT.
