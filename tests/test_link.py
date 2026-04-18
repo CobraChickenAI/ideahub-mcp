@@ -49,3 +49,43 @@ def test_self_link_rejected(conn: sqlite3.Connection) -> None:
     with pytest.raises(IdeaHubError) as exc:
         link_ideas(conn, LinkInput(source_id=a, target_id=a, kind="related"))
     assert exc.value.code == "invalid_link"
+
+
+def test_link_persists_task_ref(conn: sqlite3.Connection) -> None:
+    src, tgt = _two(conn)
+    out = link_ideas(
+        conn,
+        LinkInput(
+            source_id=src,
+            target_id=tgt,
+            kind="related",
+            task_ref="writeback-phase-1",
+        ),
+    )
+    row = conn.execute(
+        "SELECT task_ref FROM idea_link "
+        "WHERE source_idea_id = ? AND target_idea_id = ? AND kind = ?",
+        (out.source_id, out.target_id, out.kind),
+    ).fetchone()
+    assert row[0] == "writeback-phase-1"
+    assert out.task_ref == "writeback-phase-1"
+
+
+def test_link_idempotency_preserves_first_task_ref(conn: sqlite3.Connection) -> None:
+    src, tgt = _two(conn)
+    link_ideas(
+        conn,
+        LinkInput(source_id=src, target_id=tgt, kind="related", task_ref="first"),
+    )
+    second = link_ideas(
+        conn,
+        LinkInput(source_id=src, target_id=tgt, kind="related", task_ref="second"),
+    )
+    assert second.created is False
+    row = conn.execute(
+        "SELECT task_ref FROM idea_link "
+        "WHERE source_idea_id = ? AND target_idea_id = ? AND kind = ?",
+        (second.source_id, second.target_id, second.kind),
+    ).fetchone()
+    assert row[0] == "first"
+    assert second.task_ref == "first"
