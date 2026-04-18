@@ -114,3 +114,35 @@ def test_capture_task_ref_is_optional(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT task_ref FROM idea WHERE id = ?", (out.id,)).fetchone()
     assert row[0] is None
     assert out.task_ref is None
+
+
+def test_capture_dedup_preserves_first_task_ref_and_echoes_caller(
+    conn: sqlite3.Connection,
+) -> None:
+    # Pins the dedup semantics the scorer (Task 6) depends on:
+    # storage keeps the first writer's task_ref; the response echoes the caller's.
+    _seed_actor(conn)
+    first = capture_idea(
+        conn,
+        CaptureInput(
+            content="shared observation",
+            scope="global",
+            actor="human:michael",
+            task_ref="A",
+        ),
+    )
+    second = capture_idea(
+        conn,
+        CaptureInput(
+            content="shared observation",
+            scope="global",
+            actor="human:michael",
+            task_ref="B",
+        ),
+    )
+    assert first.id == second.id
+    row = conn.execute(
+        "SELECT task_ref FROM idea WHERE id = ?", (first.id,)
+    ).fetchone()
+    assert row[0] == "A"
+    assert second.task_ref == "B"

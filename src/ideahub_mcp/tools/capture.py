@@ -60,6 +60,7 @@ def capture_idea(conn: sqlite3.Connection, input_: CaptureInput) -> CaptureOutpu
         (input_.actor, input_.scope, input_.content, IDEMPOTENCY_SECONDS),
     ).fetchone()
     if dup:
+        # Dedup: storage keeps first writer's task_ref; response echoes caller's.
         return CaptureOutput(
             id=dup[0],
             scope=input_.scope,
