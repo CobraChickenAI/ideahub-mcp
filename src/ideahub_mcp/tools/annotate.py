@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ideahub_mcp.errors import IdeaHubError
 from ideahub_mcp.util.clock import utcnow_iso
@@ -16,6 +16,13 @@ class AnnotateInput(BaseModel):
     originator: str | None = None
     kind: str | None = None
     task_ref: str | None = None
+
+    @field_validator("task_ref", mode="before")
+    @classmethod
+    def _empty_task_ref_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and v == "":
+            return None
+        return v
 
 
 class AnnotateOutput(BaseModel):

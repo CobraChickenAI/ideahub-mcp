@@ -186,7 +186,9 @@ def build_server() -> FastMCP:
         description=(
             "Dump the scoped corpus as a single text blob under a token budget. "
             "Use for orientation — 'what does this repo/user think about?'. "
-            "Newest ideas first, latest note inlined by default, archived excluded by default."
+            "Newest ideas first, latest note inlined by default, archived excluded by default. "
+            "By default excludes kind='checkpoint' rows; pass "
+            "include_checkpoints=True to include them."
         )
     )
     def dump(
@@ -197,6 +199,7 @@ def build_server() -> FastMCP:
         limit_tokens: int = 50_000,
         include_all_notes: bool = False,
         include_archived: bool = False,
+        include_checkpoints: bool = False,
         ctx: Context | None = None,
     ) -> dict:
         c, _aid, s, _ = _resolve(None, scope, ctx)
@@ -210,6 +213,7 @@ def build_server() -> FastMCP:
                 limit_tokens=limit_tokens,
                 include_all_notes=include_all_notes,
                 include_archived=include_archived,
+                include_checkpoints=include_checkpoints,
             ),
         )
         return out.model_dump()
@@ -217,7 +221,9 @@ def build_server() -> FastMCP:
     @mcp.tool(
         description=(
             "Full-text search ideas with FTS5 + bm25 ranking. Returns snippet, score, and id. "
-            "Scope-optional; archived excluded by default."
+            "Scope-optional; archived excluded by default. "
+            "By default excludes kind='checkpoint' rows; pass "
+            "include_checkpoints=True to include them."
         )
     )
     def search(
@@ -226,6 +232,7 @@ def build_server() -> FastMCP:
         since: str | None = None,
         limit: int = 25,
         include_archived: bool = False,
+        include_checkpoints: bool = False,
     ) -> dict:
         c = _open_live(store)
         out = search_ideas(
@@ -236,6 +243,7 @@ def build_server() -> FastMCP:
                 since=since,
                 limit=limit,
                 include_archived=include_archived,
+                include_checkpoints=include_checkpoints,
             ),
         )
         return out.model_dump()
@@ -244,7 +252,9 @@ def build_server() -> FastMCP:
         description=(
             "List ideas with filters (scope, actor, originator, tags_any, tags_all, since, until). "
             "Returns id, scope, actor, preview (120 chars), and created_at. "
-            "Archived excluded by default."
+            "Archived excluded by default. "
+            "By default excludes kind='checkpoint' rows; pass "
+            "include_checkpoints=True to include them."
         )
     )
     def list(  # noqa: A001
@@ -257,6 +267,7 @@ def build_server() -> FastMCP:
         until: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        include_checkpoints: bool = False,
     ) -> dict:
         c = _open_live(store)
         out = list_ideas(
@@ -271,6 +282,7 @@ def build_server() -> FastMCP:
                 until=until,
                 limit=limit,
                 include_archived=include_archived,
+                include_checkpoints=include_checkpoints,
             ),
         )
         return out.model_dump()
@@ -284,7 +296,9 @@ def build_server() -> FastMCP:
         description=(
             "Find ideas related to the given id. Scoring: (1) tag overlap DESC, "
             "(2) shared originator (True first), (3) recency DESC. "
-            "Within source scope unless cross_scope=True; archived excluded by default."
+            "Within source scope unless cross_scope=True; archived excluded by default. "
+            "By default excludes kind='checkpoint' rows; pass "
+            "include_checkpoints=True to include them."
         )
     )
     def related(
@@ -292,12 +306,17 @@ def build_server() -> FastMCP:
         max: int = 10,  # noqa: A002
         cross_scope: bool = False,
         include_archived: bool = False,
+        include_checkpoints: bool = False,
     ) -> dict:
         c = _open_live(store)
         return related_ideas(
             c,
             RelatedInput(
-                id=id, max=max, cross_scope=cross_scope, include_archived=include_archived
+                id=id,
+                max=max,
+                cross_scope=cross_scope,
+                include_archived=include_archived,
+                include_checkpoints=include_checkpoints,
             ),
         ).model_dump()
 

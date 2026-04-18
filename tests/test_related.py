@@ -51,3 +51,26 @@ def test_related_empty_returns_empty(conn: sqlite3.Connection) -> None:
     )
     out = related_ideas(conn, RelatedInput(id=src.id))
     assert out.items == []
+
+
+def test_related_default_excludes_checkpoints(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "INSERT INTO actor (id, kind, display_name, first_seen_at) "
+        "VALUES ('a1','agent','a1',datetime('now'))"
+    )
+    conn.execute(
+        "INSERT INTO idea (id, content, scope, actor_id, originator_id, tags, "
+        "                  created_at, kind, task_ref) VALUES "
+        "('src','source','s1','a1','a1','[\"t1\"]','2026-04-18','idea', NULL),"
+        "('i1', 'durable','s1','a1','a1','[\"t1\"]','2026-04-17','idea', NULL),"
+        "('c1', 'trace',  's1','a1','a1','[\"t1\"]','2026-04-17','checkpoint', NULL)"
+    )
+    conn.commit()
+    out = related_ideas(conn, RelatedInput(id="src"))
+    ids = {item.id for item in out.items}
+    assert "i1" in ids
+    assert "c1" not in ids
+
+    out2 = related_ideas(conn, RelatedInput(id="src", include_checkpoints=True))
+    ids2 = {item.id for item in out2.items}
+    assert {"i1", "c1"}.issubset(ids2)

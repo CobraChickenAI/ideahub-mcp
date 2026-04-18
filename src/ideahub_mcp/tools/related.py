@@ -13,6 +13,7 @@ class RelatedInput(BaseModel):
     max: int = 10
     cross_scope: bool = False
     include_archived: bool = False
+    include_checkpoints: bool = False
 
 
 class RelatedItem(BaseModel):
@@ -56,6 +57,8 @@ def related_ideas(conn: sqlite3.Connection, input_: RelatedInput) -> RelatedOutp
         params.append(src_scope)
     if not input_.include_archived:
         where.append("archived_at IS NULL")
+    if not input_.include_checkpoints:
+        where.append("kind = 'idea'")
 
     sql = (
         "SELECT id, content, tags, originator_id, created_at FROM idea "

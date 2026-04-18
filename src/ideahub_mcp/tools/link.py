@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ideahub_mcp.errors import IdeaHubError
 from ideahub_mcp.util.clock import utcnow_iso
@@ -15,6 +15,13 @@ class LinkInput(BaseModel):
     target_id: str
     kind: str
     task_ref: str | None = None
+
+    @field_validator("task_ref", mode="before")
+    @classmethod
+    def _empty_task_ref_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and v == "":
+            return None
+        return v
 
 
 class LinkOutput(BaseModel):

@@ -89,6 +89,23 @@ def test_checkpoint_returns_candidates_and_task_context(
     assert isinstance(out.task_context.recent_ids, list)
 
 
+def test_checkpoint_empty_task_ref_becomes_none(
+    conn: sqlite3.Connection, seeded_actor: str
+) -> None:
+    out = checkpoint_idea(
+        conn,
+        CheckpointInput(
+            content="empty task_ref trace",
+            scope="s1",
+            actor=seeded_actor,
+            task_ref="",
+        ),
+    )
+    row = conn.execute("SELECT task_ref FROM idea WHERE id = ?", (out.id,)).fetchone()
+    assert row[0] is None
+    assert out.task_ref is None
+
+
 def test_checkpoint_does_not_surface_itself_as_candidate(
     conn: sqlite3.Connection, seeded_actor: str
 ) -> None:

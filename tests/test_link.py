@@ -71,6 +71,40 @@ def test_link_persists_task_ref(conn: sqlite3.Connection) -> None:
     assert out.task_ref == "writeback-phase-1"
 
 
+def test_link_accepts_checkpoint_ids(conn: sqlite3.Connection) -> None:
+    """Links between checkpoints, or between a checkpoint and an idea, must succeed."""
+    from ideahub_mcp.tools.checkpoint import CheckpointInput, checkpoint_idea
+    resolve_actor(conn, explicit="human:michael", client_info_name=None)
+    idea = capture_idea(
+        conn,
+        CaptureInput(content="durable", scope="global", actor="human:michael"),
+    )
+    cp = checkpoint_idea(
+        conn,
+        CheckpointInput(content="trace", scope="global", actor="human:michael"),
+    )
+    out = link_ideas(
+        conn,
+        LinkInput(source_id=idea.id, target_id=cp.id, kind="related"),
+    )
+    assert out.created is True
+
+
+def test_link_empty_task_ref_becomes_none(conn: sqlite3.Connection) -> None:
+    src, tgt = _two(conn)
+    out = link_ideas(
+        conn,
+        LinkInput(source_id=src, target_id=tgt, kind="related", task_ref=""),
+    )
+    row = conn.execute(
+        "SELECT task_ref FROM idea_link "
+        "WHERE source_idea_id = ? AND target_idea_id = ? AND kind = ?",
+        (out.source_id, out.target_id, out.kind),
+    ).fetchone()
+    assert row[0] is None
+    assert out.task_ref is None
+
+
 def test_link_idempotency_preserves_first_task_ref(conn: sqlite3.Connection) -> None:
     src, tgt = _two(conn)
     link_ideas(

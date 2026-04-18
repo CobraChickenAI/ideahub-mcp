@@ -25,6 +25,13 @@ class CaptureInput(BaseModel):
     def _coerce_tags(cls, v: object) -> list[str]:
         return coerce_str_list(v)
 
+    @field_validator("task_ref", mode="before")
+    @classmethod
+    def _empty_task_ref_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and v == "":
+            return None
+        return v
+
 
 class TaskContext(BaseModel):
     task_ref: str | None

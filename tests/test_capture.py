@@ -188,6 +188,22 @@ def test_capture_returns_candidates_and_task_context(
     assert len(r_ids) >= 1
 
 
+def test_capture_empty_task_ref_becomes_none(conn: sqlite3.Connection) -> None:
+    _seed_actor(conn)
+    out = capture_idea(
+        conn,
+        CaptureInput(
+            content="with empty task_ref",
+            scope="global",
+            actor="human:michael",
+            task_ref="",
+        ),
+    )
+    row = conn.execute("SELECT task_ref FROM idea WHERE id = ?", (out.id,)).fetchone()
+    assert row[0] is None
+    assert out.task_ref is None
+
+
 def test_capture_does_not_surface_itself_as_candidate(conn: sqlite3.Connection) -> None:
     _seed_actor(conn)
     out = capture_idea(
