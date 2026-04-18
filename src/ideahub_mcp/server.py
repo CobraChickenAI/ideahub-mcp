@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastmcp import Context, FastMCP
 
+from ideahub_mcp import __version__
 from ideahub_mcp.domain.actors import resolve_actor
 from ideahub_mcp.domain.scopes import resolve_scope
 from ideahub_mcp.errors import IdeaHubError
@@ -50,7 +51,36 @@ def build_server() -> FastMCP:
     if existed:
         snapshot_store(store, h / "backups")
 
-    mcp = FastMCP("ideahub-mcp")
+    mcp = FastMCP("ideahub-mcp", version=__version__)
+
+    tool_names = (
+        "capture", "dump", "search", "list", "get",
+        "related", "annotate", "archive", "link", "recognize", "ping",
+    )
+
+    @mcp.resource("ideahub://status")
+    def status_resource() -> dict:
+        return {
+            "name": "ideahub-mcp",
+            "version": __version__,
+            "store": str(store),
+            "home": str(h),
+            "tools": [*tool_names],
+        }
+
+    @mcp.tool(
+        description=(
+            "Cheap health probe. Returns server name, package version, and store path. "
+            "Use to confirm the ideahub-mcp server is connected and responsive."
+        )
+    )
+    def ping() -> dict:
+        return {
+            "ok": True,
+            "name": "ideahub-mcp",
+            "version": __version__,
+            "store": str(store),
+        }
 
     def _client_info_name(ctx: Context | None) -> str | None:
         if ctx is None:
