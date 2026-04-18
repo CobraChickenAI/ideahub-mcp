@@ -92,13 +92,15 @@ def capture_idea(conn: sqlite3.Connection, input_: CaptureInput) -> CaptureOutpu
         (input_.actor, input_.scope, input_.content, IDEMPOTENCY_SECONDS),
     ).fetchone()
     if dup:
-        # Dedup: storage keeps first writer's task_ref; response echoes caller's.
+        stored_task_ref = conn.execute(
+            "SELECT task_ref FROM idea WHERE id = ?", (dup[0],)
+        ).fetchone()[0]
         cands = score_candidates_for_write(
             conn,
             content=input_.content,
             scope=input_.scope,
             originator=input_.originator,
-            task_ref=input_.task_ref,
+            task_ref=stored_task_ref,
             exclude_id=dup[0],
         )
         return CaptureOutput(
@@ -109,10 +111,10 @@ def capture_idea(conn: sqlite3.Connection, input_: CaptureInput) -> CaptureOutpu
             created_at=dup[1],
             suggested_tags=_suggest_tags(conn, input_.content),
             actor_created=input_.actor_created,
-            task_ref=input_.task_ref,
+            task_ref=stored_task_ref,
             annotate_candidates=cands.annotate_candidates,
             related_candidates=cands.related_candidates,
-            task_context=_task_context(conn, input_.task_ref, dup[0]),
+            task_context=_task_context(conn, stored_task_ref, dup[0]),
         )
 
     new_id = new_ulid()

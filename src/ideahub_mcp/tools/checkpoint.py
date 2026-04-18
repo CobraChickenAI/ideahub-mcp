@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,7 +20,7 @@ class CheckpointInput(BaseModel):
     originator: str | None = None
     tags: list[str] = Field(default_factory=list)
     task_ref: str | None = None
-    kind_label: str | None = None  # semantic hint: observation, decision, assumption, ...
+    kind_label: Literal["observation", "decision", "assumption", "question", "next_step"] | None = None
     actor_created: bool = False
 
     @field_validator("tags", mode="before")
@@ -38,6 +39,7 @@ class CheckpointInput(BaseModel):
 class CheckpointOutput(BaseModel):
     id: str
     kind: str
+    kind_label: str | None
     scope: str
     actor: str
     originator: str | None
@@ -81,27 +83,20 @@ def _task_context(
 def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> CheckpointOutput:
     new_id = new_ulid()
     now = utcnow_iso()
-
-    # Fold the semantic label into the stored content so it remains searchable
-    # without adding a new column; the label is a display hint, not a schema
-    # commitment.
-    stored_content = input_.content
-    if input_.kind_label:
-        stored_content = f"[{input_.kind_label}] {input_.content}"
-
     conn.execute(
         "INSERT INTO idea "
-        "(id, content, scope, actor_id, originator_id, tags, created_at, kind, task_ref) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'checkpoint', ?)",
+        "(id, content, scope, actor_id, originator_id, tags, created_at, kind, task_ref, kind_label) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'checkpoint', ?, ?)",
         (
             new_id,
-            stored_content,
+            input_.content,
             input_.scope,
             input_.actor,
             input_.originator,
             json.dumps(input_.tags),
             now,
             input_.task_ref,
+            input_.kind_label,
         ),
     )
     cands = score_candidates_for_write(
@@ -115,6 +110,7 @@ def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> Checkp
     return CheckpointOutput(
         id=new_id,
         kind="checkpoint",
+        kind_label=input_.kind_label,
         scope=input_.scope,
         actor=input_.actor,
         originator=input_.originator,

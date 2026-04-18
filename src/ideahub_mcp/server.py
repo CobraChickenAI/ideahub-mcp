@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
+from typing import Literal
 
 from fastmcp import Context, FastMCP
 
@@ -162,7 +163,7 @@ def build_server() -> FastMCP:
         tags: list[str] | None = None,
         originator: str | None = None,
         task_ref: str | None = None,
-        kind_label: str | None = None,
+        kind_label: Literal["observation", "decision", "assumption", "question", "next_step"] | None = None,
         actor: str | None = None,
         ctx: Context | None = None,
     ) -> dict:
