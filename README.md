@@ -18,6 +18,24 @@ The primary user is a model. Tools are short, imperative, example-laden; errors 
 | `archive`   | Hide an idea; write a typed `archive` note with reason.                   |
 | `link`      | Connect two ideas (`related`, `supersedes`, `evolved_from`, `duplicate`). |
 | `recognize` | Inspect the actor table.                                                  |
+| `ping`      | Cheap no-side-effect health probe for connection/debugging.               |
+
+## Discovery And Health
+
+`ideahub-mcp` is intentionally tool-first, not resource-first. A client may show a
+healthy connection even when `list_resources()` is sparse or empty.
+
+To make discovery cheap and host-agnostic, the server exposes:
+
+- `ping`: a no-side-effect tool for "is the server connected and responsive?"
+- `ideahub://status`: a status resource that reports package version, storage paths,
+  and the current tool surface
+
+That design supports hosts that favor different MCP surfaces. Some clients reason
+primarily over tools. Others probe resources first. A healthy server should be easy
+to verify in either style.
+
+For the full compatibility rubric, see [docs/mcp-health.md](docs/mcp-health.md).
 
 ## Install
 
