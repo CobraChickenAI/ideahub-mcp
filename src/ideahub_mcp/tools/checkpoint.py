@@ -57,6 +57,7 @@ def _suggest_tags(conn: sqlite3.Connection, content: str, limit: int = 5) -> lis
     return sorted([t for t in known if t.lower() in lowered])[:limit]
 
 
+# Intentionally duplicated in capture.py — keep in sync.
 def _task_context(
     conn: sqlite3.Connection, task_ref: str | None, current_id: str
 ) -> TaskContext:

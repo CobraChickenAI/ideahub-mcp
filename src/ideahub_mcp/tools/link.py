@@ -56,6 +56,8 @@ def link_ideas(conn: sqlite3.Connection, input_: LinkInput) -> LinkOutput:
         (src, tgt, input_.kind),
     ).fetchone()
     if existing:
+        # Idempotent hit: return the stored task_ref so the caller learns when the
+        # edge was first established. Asymmetric with capture dedup by design.
         return LinkOutput(
             source_id=src,
             target_id=tgt,
