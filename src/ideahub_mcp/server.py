@@ -163,7 +163,9 @@ def build_server() -> FastMCP:
         tags: list[str] | None = None,
         originator: str | None = None,
         task_ref: str | None = None,
-        kind_label: Literal["observation", "decision", "assumption", "question", "next_step"] | None = None,
+        kind_label: (
+            Literal["observation", "decision", "assumption", "question", "next_step"] | None
+        ) = None,
         actor: str | None = None,
         ctx: Context | None = None,
     ) -> dict:

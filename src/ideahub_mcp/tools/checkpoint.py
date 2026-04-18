@@ -20,7 +20,9 @@ class CheckpointInput(BaseModel):
     originator: str | None = None
     tags: list[str] = Field(default_factory=list)
     task_ref: str | None = None
-    kind_label: Literal["observation", "decision", "assumption", "question", "next_step"] | None = None
+    kind_label: (
+        Literal["observation", "decision", "assumption", "question", "next_step"] | None
+    ) = None
     actor_created: bool = False
 
     @field_validator("tags", mode="before")
@@ -85,7 +87,8 @@ def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> Checkp
     now = utcnow_iso()
     conn.execute(
         "INSERT INTO idea "
-        "(id, content, scope, actor_id, originator_id, tags, created_at, kind, task_ref, kind_label) "
+        "(id, content, scope, actor_id, originator_id, tags, created_at, kind, task_ref,"
+        " kind_label) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, 'checkpoint', ?, ?)",
         (
             new_id,
