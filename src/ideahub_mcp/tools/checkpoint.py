@@ -26,7 +26,7 @@ class CheckpointInput(BaseModel):
         Literal["observation", "decision", "assumption", "question", "next_step"] | None
     ) = None
     actor_created: bool = False
-    candidates: int = Field(5, ge=0, le=10)
+    candidates: int = Field(default=5, ge=0, le=10)
 
     @field_validator("task_ref", mode="before")
     @classmethod
