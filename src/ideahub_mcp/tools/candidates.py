@@ -4,7 +4,7 @@ import sqlite3
 
 from pydantic import BaseModel
 
-from ideahub_mcp.util.fts import fts_match_clause, sanitize_fts_query
+from ideahub_mcp.util.fts import sanitize_fts_query
 
 
 class CandidateItem(BaseModel):
@@ -86,7 +86,7 @@ def score_candidates_for_write(
             "SELECT i.id, i.content, i.kind, i.task_ref, i.originator_id, "
             "       i.created_at, bm25(idea_fts) AS score "
             "FROM idea_fts JOIN idea i ON i.rowid = idea_fts.rowid "
-            f"WHERE {fts_match_clause()} AND i.scope = ? AND i.archived_at IS NULL"
+            "WHERE idea_fts MATCH ? AND i.scope = ? AND i.archived_at IS NULL"
         )
         fts_params: list[object] = [query, scope]
         if exclude_id:
