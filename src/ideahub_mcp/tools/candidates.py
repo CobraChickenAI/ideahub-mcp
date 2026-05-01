@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import re
 import sqlite3
 
 from pydantic import BaseModel
+
+from ideahub_mcp.util.fts import fts_match_clause, sanitize_fts_query
 
 
 class CandidateItem(BaseModel):
@@ -24,31 +25,6 @@ class WriteCandidates(BaseModel):
 def _preview(content: str) -> str:
     first = content.splitlines()[0] if content else ""
     return first[:120]
-
-
-_FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-
-
-def _fts_query(content: str) -> str:
-    """Build an OR-of-tokens fts5 query from content.
-
-    Quote each token to defuse fts5 syntax characters in user content. Cap the
-    number of tokens to keep queries bounded on very long content.
-    """
-    tokens = [t for t in _FTS_TOKEN_RE.findall(content) if len(t) >= 3]
-    if not tokens:
-        return ""
-    seen: set[str] = set()
-    unique: list[str] = []
-    for t in tokens:
-        low = t.lower()
-        if low in seen:
-            continue
-        seen.add(low)
-        unique.append(low)
-        if len(unique) >= 20:
-            break
-    return " OR ".join(f'"{t}"' for t in unique)
 
 
 def _invert_ts(ts: str) -> str:
@@ -101,7 +77,7 @@ def score_candidates_for_write(
     Ladder, ascending preference: FTS bm25 match -> shared task_ref -> shared
     originator -> recency. Lower bm25 is better; we invert where needed.
     """
-    query = _fts_query(content)
+    query = sanitize_fts_query(content)
 
     merged: dict[str, _Row] = {}
 
@@ -110,7 +86,7 @@ def score_candidates_for_write(
             "SELECT i.id, i.content, i.kind, i.task_ref, i.originator_id, "
             "       i.created_at, bm25(idea_fts) AS score "
             "FROM idea_fts JOIN idea i ON i.rowid = idea_fts.rowid "
-            "WHERE idea_fts MATCH ? AND i.scope = ? AND i.archived_at IS NULL"
+            f"WHERE {fts_match_clause()} AND i.scope = ? AND i.archived_at IS NULL"
         )
         fts_params: list[object] = [query, scope]
         if exclude_id:
@@ -212,3 +188,32 @@ def score_candidates_for_write(
             break
 
     return WriteCandidates(annotate_candidates=annotate, related_candidates=related)
+
+
+def candidates_or_empty(
+    conn: sqlite3.Connection,
+    *,
+    candidates: int,
+    content: str,
+    scope: str,
+    originator: str | None,
+    task_ref: str | None,
+    exclude_id: str | None,
+) -> WriteCandidates:
+    """Run the scorer when ``candidates > 0``; otherwise return empty lists.
+
+    The scorer is the largest contributor to writeback response size. The
+    ``candidates=0`` short-circuit is the immediate lever for callers that
+    want a fire-and-forget trace without paying the candidate-envelope cost.
+    """
+    if candidates <= 0:
+        return WriteCandidates(annotate_candidates=[], related_candidates=[])
+    return score_candidates_for_write(
+        conn,
+        content=content,
+        scope=scope,
+        originator=originator,
+        task_ref=task_ref,
+        max_candidates=candidates,
+        exclude_id=exclude_id,
+    )
