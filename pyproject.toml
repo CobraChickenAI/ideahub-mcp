@@ -1,6 +1,6 @@
 [project]
 name = "ideahub-mcp"
-version = "0.2.1"
+version = "0.3.0"
 description = "Agent-first MCP server for capturing and recalling ideas — the agent's and their human's."
 readme = "README.md"
 requires-python = ">=3.13"
