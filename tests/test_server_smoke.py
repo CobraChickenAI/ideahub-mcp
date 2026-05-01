@@ -12,7 +12,7 @@ def test_build_server_registers_tools(tmp_home: Path) -> None:
     assert names == {
         "capture", "dump", "search", "list", "get",
         "related", "annotate", "archive", "link", "recognize", "ping",
-        "checkpoint",
+        "checkpoint", "promote",
     }
 
 
