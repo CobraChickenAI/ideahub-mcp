@@ -23,6 +23,7 @@ from ideahub_mcp.tools.dump import DumpInput, dump_ideas
 from ideahub_mcp.tools.get import GetInput, get_idea
 from ideahub_mcp.tools.link import LinkInput, link_ideas
 from ideahub_mcp.tools.list_ideas import ListInput, list_ideas
+from ideahub_mcp.tools.promote import PromoteInput, promote_checkpoint
 from ideahub_mcp.tools.recognize import RecognizeInput, recognize_actor
 from ideahub_mcp.tools.related import RelatedInput, related_ideas
 from ideahub_mcp.tools.search import SearchInput, search_ideas
@@ -56,7 +57,7 @@ def build_server() -> FastMCP:
     mcp = FastMCP("ideahub-mcp", version=__version__)
 
     tool_names = (
-        "capture", "checkpoint", "dump", "search", "list", "get",
+        "capture", "checkpoint", "promote", "dump", "search", "list", "get",
         "related", "annotate", "archive", "link", "recognize", "ping",
     )
 
@@ -112,10 +113,20 @@ def build_server() -> FastMCP:
             "has hardened into a first-class concept. "
             "If you only need a lightweight in-progress trace, use `checkpoint` instead. "
             "`content` is required. `scope` and `actor` default from cwd and environment. "
-            "Optional `task_ref` groups all writes from the same task. "
+            "Optional `task_ref` groups all writes from the same task; it is normalized "
+            "to lowercase kebab-case at the boundary, so 'Writeback Phase 1', "
+            "'writeback_phase_1', and 'writeback-phase-1' collapse onto the same key. "
             "Returns `annotate_candidates` and `related_candidates` so the next memory "
             "move is obvious. "
-            "Idempotent within 5 seconds on identical content."
+            "`candidates` (default 5, max 10, 0 to skip) controls how many "
+            "annotate/related suggestions are returned — set to 0 for a fire-and-forget "
+            "trace where you don't intend to act on suggestions, or raise to 10 when "
+            "actively triaging. "
+            "Deduplication: same actor + same content within 5 seconds is silently "
+            "treated as the same write. Beyond the 5-second window, or across actors, "
+            "content with the same SHA-256 hash (whitespace-collapsed, lowercased) in "
+            "the same scope dedupes against the original idea — incoming tags are "
+            "merged in and a `dup_attempt` note is appended for provenance."
         )
     )
     def capture(
@@ -124,6 +135,7 @@ def build_server() -> FastMCP:
         tags: list[str] | None = None,
         originator: str | None = None,
         task_ref: str | None = None,
+        candidates: int = 5,
         actor: str | None = None,
         ctx: Context | None = None,
     ) -> dict:
@@ -137,6 +149,7 @@ def build_server() -> FastMCP:
                 originator=originator,
                 tags=tags or [],
                 task_ref=task_ref,
+                candidates=candidates,
                 actor_created=actor_created,
             ),
         )
@@ -150,11 +163,17 @@ def build_server() -> FastMCP:
             "to a full idea yet; you want to leave a visible trace of what changed in "
             "your understanding during the task. Do not use for final, standalone ideas "
             "that should survive the task — use `capture` for those. "
-            "Optional `task_ref` groups all writes from the same task. Optional "
-            "`kind_label` is a semantic hint (observation | decision | assumption | "
-            "question | next_step). "
+            "Optional `task_ref` groups all writes from the same task; it is "
+            "normalized to lowercase kebab-case at the boundary, so casing and "
+            "whitespace variants collapse onto the same key. Optional `kind_label` "
+            "is a semantic hint (observation | decision | assumption | question | "
+            "next_step). "
             "Returns scored `annotate_candidates` (existing ideas this trace may update) "
-            "and `related_candidates` so the next memory move is obvious."
+            "and `related_candidates` so the next memory move is obvious. "
+            "`candidates` (default 5, max 10, 0 to skip) controls how many "
+            "annotate/related suggestions are returned — set to 0 for a fire-and-forget "
+            "trace where you don't intend to act on suggestions, or raise to 10 when "
+            "actively triaging."
         )
     )
     def checkpoint(
@@ -166,6 +185,7 @@ def build_server() -> FastMCP:
         kind_label: (
             Literal["observation", "decision", "assumption", "question", "next_step"] | None
         ) = None,
+        candidates: int = 5,
         actor: str | None = None,
         ctx: Context | None = None,
     ) -> dict:
@@ -180,6 +200,7 @@ def build_server() -> FastMCP:
                 tags=tags or [],
                 task_ref=task_ref,
                 kind_label=kind_label,
+                candidates=candidates,
                 actor_created=actor_created,
             ),
         )
@@ -226,7 +247,13 @@ def build_server() -> FastMCP:
             "Full-text search ideas with FTS5 + bm25 ranking. Returns snippet, score, and id. "
             "Scope-optional; archived excluded by default. "
             "By default excludes kind='checkpoint' rows; pass "
-            "include_checkpoints=True to include them."
+            "include_checkpoints=True to include them. "
+            "`query_mode` (default 'auto') controls how `query` is interpreted: "
+            "'auto' tokenizes and quotes the query so hyphens, colons, asterisks and "
+            "other FTS5 operators are treated as content (use this when searching for "
+            "kebab-case identifiers like task_refs or branch names); 'raw' passes the "
+            "query through unchanged for FTS5 phrase, NEAR, or column-qualified syntax "
+            "and raises a loud error on syntax failure."
         )
     )
     def search(
@@ -236,6 +263,7 @@ def build_server() -> FastMCP:
         limit: int = 25,
         include_archived: bool = False,
         include_checkpoints: bool = False,
+        query_mode: Literal["auto", "raw"] = "auto",
     ) -> dict:
         c = _open_live(store)
         out = search_ideas(
@@ -247,6 +275,7 @@ def build_server() -> FastMCP:
                 limit=limit,
                 include_archived=include_archived,
                 include_checkpoints=include_checkpoints,
+                query_mode=query_mode,
             ),
         )
         return out.model_dump()
@@ -332,7 +361,8 @@ def build_server() -> FastMCP:
             "separate idea. "
             "Optional `kind` labels the note semantically (confirmation, counterexample, "
             "observation, follow-up, question, correction). Optional `task_ref` groups "
-            "all writes from the same task."
+            "all writes from the same task and is normalized to lowercase kebab-case "
+            "at the boundary."
         )
     )
     def annotate(
@@ -359,6 +389,28 @@ def build_server() -> FastMCP:
 
     @mcp.tool(
         description=(
+            "Promote a checkpoint to a durable idea. "
+            "Use when: a working-memory trace turns out to be load-bearing — the "
+            "synthesis has hardened, the decision is stable, the observation is "
+            "reusable. The id is preserved, so existing links, annotations, and "
+            "task_ref groupings carry forward unchanged. A `kind='promotion'` note "
+            "records the original `kind_label` for provenance. "
+            "Promotion is one-way: an idea cannot be demoted back to a checkpoint."
+        )
+    )
+    def promote(
+        id: str,  # noqa: A002
+        actor: str | None = None,
+        originator: str | None = None,
+        ctx: Context | None = None,
+    ) -> dict:
+        c, aid, _, _ = _resolve(actor, None, ctx)
+        return promote_checkpoint(
+            c, PromoteInput(id=id, actor=aid, originator=originator)
+        ).model_dump()
+
+    @mcp.tool(
+        description=(
             "Archive an idea (sets archived_at, writes kind='archive' note with reason). "
             "Idempotent. Archived ideas are excluded by default from list/search/dump."
         )
@@ -381,7 +433,8 @@ def build_server() -> FastMCP:
             "evolved, duplicated, or superseding one another. "
             "`kind` ∈ {related, supersedes, evolved_from, duplicate}. `related` is "
             "canonicalized (smaller id becomes source). Self-links rejected. Optional "
-            "`task_ref` groups all writes from the same task."
+            "`task_ref` groups all writes from the same task and is normalized to "
+            "lowercase kebab-case at the boundary."
         )
     )
     def link(
