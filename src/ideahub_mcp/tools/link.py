@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 
 from ideahub_mcp.errors import IdeaHubError
 from ideahub_mcp.util.clock import utcnow_iso
+from ideahub_mcp.util.coerce import normalize_task_ref
 
 LINK_KINDS = {"related", "supersedes", "evolved_from", "duplicate"}
 
@@ -18,10 +19,8 @@ class LinkInput(BaseModel):
 
     @field_validator("task_ref", mode="before")
     @classmethod
-    def _empty_task_ref_to_none(cls, v: object) -> object:
-        if isinstance(v, str) and v == "":
-            return None
-        return v
+    def _normalize_task_ref(cls, v: object) -> object:
+        return normalize_task_ref(v)
 
 
 class LinkOutput(BaseModel):
