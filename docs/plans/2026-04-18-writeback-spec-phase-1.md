@@ -1,80 +1,80 @@
-# <span data-proof="authored" data-by="ai:claude">ideahub-mcp v0.2.0 — Writeback Spec Phase 1 Implementation Plan</span>
+# ideahub-mcp v0.2.0 — Writeback Spec Phase 1 Implementation Plan
 
-> **<span data-proof="authored" data-by="ai:claude">For Claude:</span>** <span data-proof="authored" data-by="ai:claude">REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.</span>
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**<span data-proof="authored" data-by="ai:claude">Goal:</span>** <span data-proof="authored" data-by="ai:claude">Make</span> <span data-proof="authored" data-by="ai:claude">`ideahub-mcp`</span> <span data-proof="authored" data-by="ai:claude">feel like working memory by adding a second write verb (`checkpoint`), uniform</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">provenance across all four write-path verbs, and candidate-surfacing return payloads so the model sees where a trace likely belongs without being told what to do.</span>
+**Goal:** Make `ideahub-mcp` feel like working memory by adding a second write verb (`checkpoint`), uniform `task_ref` provenance across all four write-path verbs, and candidate-surfacing return payloads so the model sees where a trace likely belongs without being told what to do.
 
-**<span data-proof="authored" data-by="ai:claude">Architecture:</span>** <span data-proof="authored" data-by="ai:claude">Single SQLite migration adds</span> <span data-proof="authored" data-by="ai:claude">`kind`</span> <span data-proof="authored" data-by="ai:claude">and</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">columns. All four write-path tools (`capture`,</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`,</span> <span data-proof="authored" data-by="ai:claude">`annotate`,</span> <span data-proof="authored" data-by="ai:claude">`link`) accept an optional</span> <span data-proof="authored" data-by="ai:claude">`task_ref`. A new shared scorer produces</span> <span data-proof="authored" data-by="ai:claude">`annotate_candidates`</span> <span data-proof="authored" data-by="ai:claude">and</span> <span data-proof="authored" data-by="ai:claude">`related_candidates`</span> <span data-proof="authored" data-by="ai:claude">at write time, ranked by FTS → shared task_ref → shared originator → recency. Top-level search/list/dump default-exclude</span> <span data-proof="authored" data-by="ai:claude">`kind='checkpoint'`</span> <span data-proof="authored" data-by="ai:claude">(opt-in via</span> <span data-proof="authored" data-by="ai:claude">`include_checkpoints`).</span> <span data-proof="authored" data-by="ai:claude">`related_ideas`</span> <span data-proof="authored" data-by="ai:claude">scoring is untouched in v0.2.0 (flagged for later).</span>
+**Architecture:** Single SQLite migration adds `kind` and `task_ref` columns. All four write-path tools (`capture`, `checkpoint`, `annotate`, `link`) accept an optional `task_ref`. A new shared scorer produces `annotate_candidates` and `related_candidates` at write time, ranked by FTS → shared task_ref → shared originator → recency. Top-level search/list/dump default-exclude `kind='checkpoint'` (opt-in via `include_checkpoints`). `related_ideas` scoring is untouched in v0.2.0 (flagged for later).
 
-**<span data-proof="authored" data-by="ai:claude">Tech Stack:</span>** <span data-proof="authored" data-by="ai:claude">Python 3.13, FastMCP 2.x, native</span> <span data-proof="authored" data-by="ai:claude">`sqlite3`</span> <span data-proof="authored" data-by="ai:claude">with FTS5, Pydantic 2, pytest + pytest-asyncio + hypothesis, ruff + pyright.</span>
-
-***
-
-## <span data-proof="authored" data-by="ai:claude">Context Before Starting</span>
-
-<span data-proof="authored" data-by="ai:claude">Read these files before beginning. They are the load-bearing prior art:</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/capture.py`</span> <span data-proof="authored" data-by="ai:claude">— existing write shape, dedup window,</span> <span data-proof="authored" data-by="ai:claude">`_suggest_tags`</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/annotate.py`</span> <span data-proof="authored" data-by="ai:claude">— existing note-append shape</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/link.py`</span> <span data-proof="authored" data-by="ai:claude">— existing link canonicalization + idempotency</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/related.py`</span> <span data-proof="authored" data-by="ai:claude">— existing scorer (tag overlap → shared_originator → recency);</span> **<span data-proof="authored" data-by="ai:claude">do not modify in v0.2.0</span>**
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/search.py`</span> <span data-proof="authored" data-by="ai:claude">— existing FTS5 query shape</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/list_ideas.py`,</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/dump.py`</span> <span data-proof="authored" data-by="ai:claude">— existing filters</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/server.py`</span> <span data-proof="authored" data-by="ai:claude">— how tools are registered and wired</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/storage/migrations/001_init.sql`</span> <span data-proof="authored" data-by="ai:claude">— current schema</span>
-
-* <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/storage/migrations.py`</span> <span data-proof="authored" data-by="ai:claude">— migration runner (lexical order, idempotent)</span>
-
-* <span data-proof="authored" data-by="ai:claude">`tests/conftest.py`</span> <span data-proof="authored" data-by="ai:claude">—</span> <span data-proof="authored" data-by="ai:claude">`conn`</span> <span data-proof="authored" data-by="ai:claude">fixture gives a fresh migrated SQLite;</span> <span data-proof="authored" data-by="ai:claude">`tmp_home`</span> <span data-proof="authored" data-by="ai:claude">isolates</span> <span data-proof="authored" data-by="ai:claude">`IDEAHUB_MCP_HOME`</span>
-
-**<span data-proof="authored" data-by="ai:claude">Design decisions already made (do not re-open):</span>**
-
-* <span data-proof="authored" data-by="ai:claude">Same-table storage: checkpoints live in</span> <span data-proof="authored" data-by="ai:claude">`idea`</span> <span data-proof="authored" data-by="ai:claude">with</span> <span data-proof="authored" data-by="ai:claude">`kind='checkpoint'`.</span>
-
-* <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">is an opaque free-form string, no validation, no lifecycle.</span>
-
-* <span data-proof="authored" data-by="ai:claude">`related_ideas`</span> <span data-proof="authored" data-by="ai:claude">scorer is</span> **<span data-proof="authored" data-by="ai:claude">not</span>** <span data-proof="authored" data-by="ai:claude">touched in v0.2.0 — only top-level search/list/dump default-exclude checkpoints.</span>
-
-* <span data-proof="authored" data-by="ai:claude">Scoring ladder for write-time candidates: FTS/bm25 → shared</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">→ shared originator → recency.</span>
-
-* <span data-proof="authored" data-by="ai:claude">Return-payload signals are structured facts,</span> **<span data-proof="authored" data-by="ai:claude">not</span>** <span data-proof="authored" data-by="ai:claude">imperative action strings.</span>
-
-**<span data-proof="authored" data-by="ai:claude">Out of scope for v0.2.0:</span>**
-
-* <span data-proof="authored" data-by="ai:claude">`promote`</span> <span data-proof="authored" data-by="ai:claude">tool</span>
-
-* <span data-proof="authored" data-by="ai:claude">`start_task`</span> <span data-proof="authored" data-by="ai:claude">/</span> <span data-proof="authored" data-by="ai:claude">`finish_task`</span> <span data-proof="authored" data-by="ai:claude">lifecycle tools</span>
-
-* <span data-proof="authored" data-by="ai:claude">Kind-aware tweak to</span> <span data-proof="authored" data-by="ai:claude">`related_ideas`</span> <span data-proof="authored" data-by="ai:claude">scorer</span>
-
-* <span data-proof="authored" data-by="ai:claude">`memory_loop`</span> <span data-proof="authored" data-by="ai:claude">prompt or</span> <span data-proof="authored" data-by="ai:claude">`ideahub://working-memory-policy`</span> <span data-proof="authored" data-by="ai:claude">resource</span>
-
-* <span data-proof="authored" data-by="ai:claude">Elicitation on weak writes</span>
-
-* <span data-proof="authored" data-by="ai:claude">Extended</span> <span data-proof="authored" data-by="ai:claude">`ping`</span> <span data-proof="authored" data-by="ai:claude">/</span> <span data-proof="authored" data-by="ai:claude">`current_context`</span>
+**Tech Stack:** Python 3.13, FastMCP 2.x, native `sqlite3` with FTS5, Pydantic 2, pytest + pytest-asyncio + hypothesis, ruff + pyright.
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 1: Schema Migration (kind + task_ref columns)</span>
+## Context Before Starting
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+Read these files before beginning. They are the load-bearing prior art:
 
-* <span data-proof="authored" data-by="ai:claude">Create:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/storage/migrations/002_kind_and_task_ref.sql`</span>
+* `src/ideahub_mcp/tools/capture.py` — existing write shape, dedup window, `_suggest_tags`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_migrations.py`</span> <span data-proof="authored" data-by="ai:claude">(add new test)</span>
+* `src/ideahub_mcp/tools/annotate.py` — existing note-append shape
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing test</span>**
+* `src/ideahub_mcp/tools/link.py` — existing link canonicalization + idempotency
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_migrations.py`:</span>
+* `src/ideahub_mcp/tools/related.py` — existing scorer (tag overlap → shared_originator → recency); **do not modify in v0.2.0**
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTE3MSwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+* `src/ideahub_mcp/tools/search.py` — existing FTS5 query shape
+
+* `src/ideahub_mcp/tools/list_ideas.py`, `src/ideahub_mcp/tools/dump.py` — existing filters
+
+* `src/ideahub_mcp/server.py` — how tools are registered and wired
+
+* `src/ideahub_mcp/storage/migrations/001_init.sql` — current schema
+
+* `src/ideahub_mcp/storage/migrations.py` — migration runner (lexical order, idempotent)
+
+* `tests/conftest.py` — `conn` fixture gives a fresh migrated SQLite; `tmp_home` isolates `IDEAHUB_MCP_HOME`
+
+**Design decisions already made (do not re-open):**
+
+* Same-table storage: checkpoints live in `idea` with `kind='checkpoint'`.
+
+* `task_ref` is an opaque free-form string, no validation, no lifecycle.
+
+* `related_ideas` scorer is **not** touched in v0.2.0 — only top-level search/list/dump default-exclude checkpoints.
+
+* Scoring ladder for write-time candidates: FTS/bm25 → shared `task_ref` → shared originator → recency.
+
+* Return-payload signals are structured facts, **not** imperative action strings.
+
+**Out of scope for v0.2.0:**
+
+* `promote` tool
+
+* `start_task` / `finish_task` lifecycle tools
+
+* Kind-aware tweak to `related_ideas` scorer
+
+* `memory_loop` prompt or `ideahub://working-memory-policy` resource
+
+* Elicitation on weak writes
+
+* Extended `ping` / `current_context`
+
+***
+
+## Task 1: Schema Migration (kind + task_ref columns)
+
+**Files:**
+
+* Create: `src/ideahub_mcp/storage/migrations/002_kind_and_task_ref.sql`
+
+* Test: `tests/test_migrations.py` (add new test)
+
+**Step 1: Write the failing test**
+
+Append to `tests/test_migrations.py`:
+
+```python
 def test_migration_002_adds_kind_and_task_ref(conn: sqlite3.Connection) -> None:
     idea_cols = {r[1] for r in conn.execute("PRAGMA table_info(idea)").fetchall()}
     assert "kind" in idea_cols
@@ -107,16 +107,16 @@ def test_migration_002_adds_kind_and_task_ref(conn: sqlite3.Connection) -> None:
     assert "idea_task_ref_idx" in idxs
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the test to verify it fails</span>**
+**Step 2: Run the test to verify it fails**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_migrations.py::test_migration_002_adds_kind_and_task_ref -v`
-Expected: FAIL — migration file does not exist;</span> <span data-proof="authored" data-by="ai:claude">`kind`</span> <span data-proof="authored" data-by="ai:claude">and</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">columns absent.</span>
+Run: `uv run pytest tests/test_migrations.py::test_migration_002_adds_kind_and_task_ref -v`
+Expected: FAIL — migration file does not exist; `kind` and `task_ref` columns absent.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Write the migration</span>**
+**Step 3: Write the migration**
 
-<span data-proof="authored" data-by="ai:claude">Create</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/storage/migrations/002_kind_and_task_ref.sql`:</span>
+Create `src/ideahub_mcp/storage/migrations/002_kind_and_task_ref.sql`:
 
-```sql proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzY4LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```sql
 ALTER TABLE idea ADD COLUMN kind TEXT NOT NULL DEFAULT 'idea'
   CHECK (kind IN ('idea','checkpoint'));
 ALTER TABLE idea ADD COLUMN task_ref TEXT;
@@ -128,19 +128,19 @@ CREATE INDEX idea_kind_idx     ON idea (kind);
 CREATE INDEX idea_task_ref_idx ON idea (task_ref) WHERE task_ref IS NOT NULL;
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run the test to verify it passes</span>**
+**Step 4: Run the test to verify it passes**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_migrations.py -v`
-Expected: all migration tests PASS.</span>
+Run: `uv run pytest tests/test_migrations.py -v`
+Expected: all migration tests PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Run full suite to confirm no regressions</span>**
+**Step 5: Run full suite to confirm no regressions**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest -q`
-Expected: all existing tests PASS (the new columns are optional and defaulted).</span>
+Run: `uv run pytest -q`
+Expected: all existing tests PASS (the new columns are optional and defaulted).
 
-**<span data-proof="authored" data-by="ai:claude">Step 6: Commit</span>**
+**Step 6: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzI5LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/storage/migrations/002_kind_and_task_ref.sql tests/test_migrations.py
 git commit -m "$(cat <<'EOF'
 Add kind and task_ref columns so the ideas table can carry checkpoints and provenance back to the task that produced any mutation
@@ -152,19 +152,19 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 2: Thread task_ref through capture</span>
+## Task 2: Thread task_ref through capture
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/capture.py`</span>
+* Modify: `src/ideahub_mcp/tools/capture.py`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_capture.py`</span> <span data-proof="authored" data-by="ai:claude">(add new test)</span>
+* Test: `tests/test_capture.py` (add new test)
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing test</span>**
+**Step 1: Write the failing test**
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_capture.py`:</span>
+Append to `tests/test_capture.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6ODMwLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 def test_capture_persists_task_ref(conn: sqlite3.Connection, seeded_actor: str) -> None:
     out = capture_idea(
         conn,
@@ -189,23 +189,23 @@ def test_capture_task_ref_is_optional(conn: sqlite3.Connection, seeded_actor: st
     assert out.task_ref is None
 ```
 
-<span data-proof="authored" data-by="ai:claude">(If</span> <span data-proof="authored" data-by="ai:claude">`seeded_actor`</span> <span data-proof="authored" data-by="ai:claude">fixture doesn't exist, check the top of</span> <span data-proof="authored" data-by="ai:claude">`tests/test_capture.py`</span> <span data-proof="authored" data-by="ai:claude">for the existing pattern and replicate it. Use whatever actor-seeding pattern the other tests already use.)</span>
+(If `seeded_actor` fixture doesn't exist, check the top of `tests/test_capture.py` for the existing pattern and replicate it. Use whatever actor-seeding pattern the other tests already use.)
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_capture.py::test_capture_persists_task_ref tests/test_capture.py::test_capture_task_ref_is_optional -v`
-Expected: FAIL —</span> <span data-proof="authored" data-by="ai:claude">`CaptureInput`</span> <span data-proof="authored" data-by="ai:claude">has no</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">field;</span> <span data-proof="authored" data-by="ai:claude">`CaptureOutput`</span> <span data-proof="authored" data-by="ai:claude">has no</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">field.</span>
+Run: `uv run pytest tests/test_capture.py::test_capture_persists_task_ref tests/test_capture.py::test_capture_task_ref_is_optional -v`
+Expected: FAIL — `CaptureInput` has no `task_ref` field; `CaptureOutput` has no `task_ref` field.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Update</span>** **<span data-proof="authored" data-by="ai:claude">`CaptureInput`,</span>** **<span data-proof="authored" data-by="ai:claude">`CaptureOutput`, and persistence</span>**
+**Step 3: Update** **`CaptureInput`,** **`CaptureOutput`, and persistence**
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/capture.py`:</span>
+In `src/ideahub_mcp/tools/capture.py`:
 
-1. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`CaptureInput`</span> <span data-proof="authored" data-by="ai:claude">(after</span> <span data-proof="authored" data-by="ai:claude">`actor_created`).</span>
-2. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`CaptureOutput`.</span>
-3. <span data-proof="authored" data-by="ai:claude">Update the dedup-return</span> <span data-proof="authored" data-by="ai:claude">`CaptureOutput(...)`</span> <span data-proof="authored" data-by="ai:claude">to pass</span> <span data-proof="authored" data-by="ai:claude">`task_ref=input_.task_ref`.</span>
-4. <span data-proof="authored" data-by="ai:claude">Update the INSERT to include</span> <span data-proof="authored" data-by="ai:claude">`task_ref`:</span>
+1. Add `task_ref: str | None = None` to `CaptureInput` (after `actor_created`).
+2. Add `task_ref: str | None = None` to `CaptureOutput`.
+3. Update the dedup-return `CaptureOutput(...)` to pass `task_ref=input_.task_ref`.
+4. Update the INSERT to include `task_ref`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzQ3LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 conn.execute(
     "INSERT INTO idea (id, content, scope, actor_id, originator_id, tags, created_at, task_ref) "
     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -222,16 +222,16 @@ conn.execute(
 )
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Update the final-return</span> <span data-proof="authored" data-by="ai:claude">`CaptureOutput(...)`</span> <span data-proof="authored" data-by="ai:claude">to pass</span> <span data-proof="authored" data-by="ai:claude">`task_ref=input_.task_ref`.</span>
+1. Update the final-return `CaptureOutput(...)` to pass `task_ref=input_.task_ref`.
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run tests to verify they pass</span>**
+**Step 4: Run tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_capture.py -v`
-Expected: all capture tests PASS.</span>
+Run: `uv run pytest tests/test_capture.py -v`
+Expected: all capture tests PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MjgxLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/capture.py tests/test_capture.py
 git commit -m "$(cat <<'EOF'
 Thread an optional task_ref through capture so durable ideas can carry the anchor of the task that produced them
@@ -243,19 +243,19 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 3: Thread task_ref through annotate</span>
+## Task 3: Thread task_ref through annotate
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/annotate.py`</span>
+* Modify: `src/ideahub_mcp/tools/annotate.py`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_annotate.py`</span> <span data-proof="authored" data-by="ai:claude">(add new test)</span>
+* Test: `tests/test_annotate.py` (add new test)
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing test</span>**
+**Step 1: Write the failing test**
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_annotate.py`:</span>
+Append to `tests/test_annotate.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NTI3LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 def test_annotate_persists_task_ref(conn: sqlite3.Connection, seeded_idea_id: str, seeded_actor: str) -> None:
     out = annotate_idea(
         conn,
@@ -273,22 +273,22 @@ def test_annotate_persists_task_ref(conn: sqlite3.Connection, seeded_idea_id: st
     assert out.task_ref == "writeback-phase-1"
 ```
 
-<span data-proof="authored" data-by="ai:claude">(Reuse whatever</span> <span data-proof="authored" data-by="ai:claude">`seeded_idea_id`</span> <span data-proof="authored" data-by="ai:claude">/</span> <span data-proof="authored" data-by="ai:claude">`seeded_actor`</span> <span data-proof="authored" data-by="ai:claude">fixture pattern already exists in that test file.)</span>
+(Reuse whatever `seeded_idea_id` / `seeded_actor` fixture pattern already exists in that test file.)
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the test to verify it fails</span>**
+**Step 2: Run the test to verify it fails**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_annotate.py::test_annotate_persists_task_ref -v`
-Expected: FAIL —</span> <span data-proof="authored" data-by="ai:claude">`AnnotateInput`</span> <span data-proof="authored" data-by="ai:claude">has no</span> <span data-proof="authored" data-by="ai:claude">`task_ref`.</span>
+Run: `uv run pytest tests/test_annotate.py::test_annotate_persists_task_ref -v`
+Expected: FAIL — `AnnotateInput` has no `task_ref`.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Update annotate.py</span>**
+**Step 3: Update annotate.py**
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/annotate.py`:</span>
+In `src/ideahub_mcp/tools/annotate.py`:
 
-1. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`AnnotateInput`.</span>
-2. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`AnnotateOutput`.</span>
-3. <span data-proof="authored" data-by="ai:claude">Update the INSERT:</span>
+1. Add `task_ref: str | None = None` to `AnnotateInput`.
+2. Add `task_ref: str | None = None` to `AnnotateOutput`.
+3. Update the INSERT:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzQ3LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 conn.execute(
     "INSERT INTO idea_note "
     "(id, idea_id, kind, content, actor_id, originator_id, created_at, task_ref) "
@@ -306,9 +306,9 @@ conn.execute(
 )
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Update the return:</span>
+1. Update the return:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTQwLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 return AnnotateOutput(
     note_id=note_id,
     idea_id=input_.id,
@@ -318,14 +318,14 @@ return AnnotateOutput(
 )
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run tests to verify they pass</span>**
+**Step 4: Run tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_annotate.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_annotate.py -v`
+Expected: PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6Mjk0LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/annotate.py tests/test_annotate.py
 git commit -m "$(cat <<'EOF'
 Thread an optional task_ref through annotate so notes on existing ideas reconstruct into the task stream that produced them
@@ -337,19 +337,19 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 4: Thread task_ref through link</span>
+## Task 4: Thread task_ref through link
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/link.py`</span>
+* Modify: `src/ideahub_mcp/tools/link.py`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_link.py`</span> <span data-proof="authored" data-by="ai:claude">(add new test)</span>
+* Test: `tests/test_link.py` (add new test)
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing test</span>**
+**Step 1: Write the failing test**
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_link.py`:</span>
+Append to `tests/test_link.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTM1NywiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 def test_link_persists_task_ref(conn: sqlite3.Connection, two_seeded_idea_ids: tuple[str, str]) -> None:
     src, tgt = two_seeded_idea_ids
     out = link_ideas(
@@ -388,22 +388,22 @@ def test_link_idempotency_preserves_first_task_ref(
     assert row[0] == "first"
 ```
 
-<span data-proof="authored" data-by="ai:claude">(Again, reuse the existing fixture pattern for seeding two ideas.)</span>
+(Again, reuse the existing fixture pattern for seeding two ideas.)
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_link.py::test_link_persists_task_ref -v`
-Expected: FAIL.</span>
+Run: `uv run pytest tests/test_link.py::test_link_persists_task_ref -v`
+Expected: FAIL.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Update link.py</span>**
+**Step 3: Update link.py**
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/link.py`:</span>
+In `src/ideahub_mcp/tools/link.py`:
 
-1. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`LinkInput`.</span>
-2. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref: str | None = None`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`LinkOutput`.</span>
-3. <span data-proof="authored" data-by="ai:claude">On idempotent hit, read the existing</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">and return it:</span>
+1. Add `task_ref: str | None = None` to `LinkInput`.
+2. Add `task_ref: str | None = None` to `LinkOutput`.
+3. On idempotent hit, read the existing `task_ref` and return it:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzE1LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 existing = conn.execute(
     "SELECT task_ref FROM idea_link "
     "WHERE source_idea_id = ? AND target_idea_id = ? AND kind = ?",
@@ -416,9 +416,9 @@ if existing:
     )
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">On fresh insert, persist and return the incoming</span> <span data-proof="authored" data-by="ai:claude">`task_ref`:</span>
+1. On fresh insert, persist and return the incoming `task_ref`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzEyLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 conn.execute(
     "INSERT INTO idea_link (source_idea_id, target_idea_id, kind, created_at, task_ref) "
     "VALUES (?, ?, ?, ?, ?)",
@@ -430,14 +430,14 @@ return LinkOutput(
 )
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run tests to verify they pass</span>**
+**Step 4: Run tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_link.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_link.py -v`
+Expected: PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzMwLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/link.py tests/test_link.py
 git commit -m "$(cat <<'EOF'
 Thread an optional task_ref through link so graph mutations can be traced to the task that revealed the relationship; preserve the first task_ref on idempotent repeats
@@ -449,19 +449,19 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 5: New checkpoint tool</span>
+## Task 5: New checkpoint tool
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Create:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/checkpoint.py`</span>
+* Create: `src/ideahub_mcp/tools/checkpoint.py`
 
-* <span data-proof="authored" data-by="ai:claude">Create:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_checkpoint.py`</span>
+* Create: `tests/test_checkpoint.py`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing tests</span>**
+**Step 1: Write the failing tests**
 
-<span data-proof="authored" data-by="ai:claude">Create</span> <span data-proof="authored" data-by="ai:claude">`tests/test_checkpoint.py`:</span>
+Create `tests/test_checkpoint.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTg0MywiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 from __future__ import annotations
 
 import sqlite3
@@ -530,14 +530,14 @@ def test_checkpoint_task_ref_optional(
     assert out.task_ref is None
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_checkpoint.py -v`
-Expected: FAIL —</span> <span data-proof="authored" data-by="ai:claude">`ideahub_mcp.tools.checkpoint`</span> <span data-proof="authored" data-by="ai:claude">does not exist.</span>
+Run: `uv run pytest tests/test_checkpoint.py -v`
+Expected: FAIL — `ideahub_mcp.tools.checkpoint` does not exist.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Write</span>** **<span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/checkpoint.py`</span>**
+**Step 3: Write** **`src/ideahub_mcp/tools/checkpoint.py`**
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MjY0NiwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 from __future__ import annotations
 
 import json
@@ -629,14 +629,14 @@ def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> Checkp
     )
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run the tests to verify they pass</span>**
+**Step 4: Run the tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_checkpoint.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_checkpoint.py -v`
+Expected: PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MjkwLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/checkpoint.py tests/test_checkpoint.py
 git commit -m "$(cat <<'EOF'
 Add a checkpoint write verb so in-flight traces have a cognitively cheap surface distinct from durable idea capture
@@ -648,19 +648,19 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 6: Shared candidate scorer</span>
+## Task 6: Shared candidate scorer
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Create:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/candidates.py`</span>
+* Create: `src/ideahub_mcp/tools/candidates.py`
 
-* <span data-proof="authored" data-by="ai:claude">Create:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_candidates.py`</span>
+* Create: `tests/test_candidates.py`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing tests</span>**
+**Step 1: Write the failing tests**
 
-<span data-proof="authored" data-by="ai:claude">Create</span> <span data-proof="authored" data-by="ai:claude">`tests/test_candidates.py`:</span>
+Create `tests/test_candidates.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzU4MCwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 from __future__ import annotations
 
 import sqlite3
@@ -768,14 +768,14 @@ def test_scorer_explains_why(seeded: sqlite3.Connection) -> None:
     assert all(isinstance(c.why, str) and c.why for c in result.related)
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_candidates.py -v`
-Expected: FAIL — module does not exist.</span>
+Run: `uv run pytest tests/test_candidates.py -v`
+Expected: FAIL — module does not exist.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Write</span>** **<span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/candidates.py`</span>**
+**Step 3: Write** **`src/ideahub_mcp/tools/candidates.py`**
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NjEyNCwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 from __future__ import annotations
 
 import re
@@ -958,16 +958,16 @@ def _display_score(row: dict[str, object]) -> float:
     return round(score, 3)
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run the tests to verify they pass</span>**
+**Step 4: Run the tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_candidates.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_candidates.py -v`
+Expected: PASS.
 
-<span data-proof="authored" data-by="ai:claude">If tests fail because</span> <span data-proof="authored" data-by="ai:claude">`idea_fts`</span> <span data-proof="authored" data-by="ai:claude">isn't populated for the seeded rows, inspect the migration 001 triggers — they fire on INSERT, so the fixture should be fine. If FTS still isn't hitting, rebuild it with</span> <span data-proof="authored" data-by="ai:claude">`INSERT INTO idea_fts(idea_fts) VALUES('rebuild')`</span> <span data-proof="authored" data-by="ai:claude">in the fixture. Do not change the production triggers.</span>
+If tests fail because `idea_fts` isn't populated for the seeded rows, inspect the migration 001 triggers — they fire on INSERT, so the fixture should be fine. If FTS still isn't hitting, rebuild it with `INSERT INTO idea_fts(idea_fts) VALUES('rebuild')` in the fixture. Do not change the production triggers.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6Mzc1LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/candidates.py tests/test_candidates.py
 git commit -m "$(cat <<'EOF'
 Produce write-time annotate and related candidates ranked by FTS, shared task_ref, shared originator, and recency so a fresh trace surfaces where it probably belongs without the model having to search
@@ -979,21 +979,21 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 7: Enrich capture + checkpoint returns with candidates and task_context</span>
+## Task 7: Enrich capture + checkpoint returns with candidates and task_context
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/capture.py`</span>
+* Modify: `src/ideahub_mcp/tools/capture.py`
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/checkpoint.py`</span>
+* Modify: `src/ideahub_mcp/tools/checkpoint.py`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_capture.py`,</span> <span data-proof="authored" data-by="ai:claude">`tests/test_checkpoint.py`</span>
+* Test: `tests/test_capture.py`, `tests/test_checkpoint.py`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing tests</span>**
+**Step 1: Write the failing tests**
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_capture.py`:</span>
+Append to `tests/test_capture.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTIxMCwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 def test_capture_returns_candidates_and_task_context(
     conn: sqlite3.Connection, seeded_actor: str
 ) -> None:
@@ -1029,9 +1029,9 @@ def test_capture_returns_candidates_and_task_context(
     assert isinstance(out.task_context.recent_ids, list)
 ```
 
-<span data-proof="authored" data-by="ai:claude">Append to</span> <span data-proof="authored" data-by="ai:claude">`tests/test_checkpoint.py`:</span>
+Append to `tests/test_checkpoint.py`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NjcyLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 def test_checkpoint_returns_candidates_and_task_context(
     conn: sqlite3.Connection, seeded_actor: str
 ) -> None:
@@ -1054,32 +1054,32 @@ def test_checkpoint_returns_candidates_and_task_context(
     assert out.task_context.task_ref == "t1"
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_capture.py::test_capture_returns_candidates_and_task_context tests/test_checkpoint.py::test_checkpoint_returns_candidates_and_task_context -v`
-Expected: FAIL — outputs lack those fields.</span>
+Run: `uv run pytest tests/test_capture.py::test_capture_returns_candidates_and_task_context tests/test_checkpoint.py::test_checkpoint_returns_candidates_and_task_context -v`
+Expected: FAIL — outputs lack those fields.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Extend outputs and wire the scorer</span>**
+**Step 3: Extend outputs and wire the scorer**
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/capture.py`:</span>
+In `src/ideahub_mcp/tools/capture.py`:
 
-1. <span data-proof="authored" data-by="ai:claude">Import:</span>
+1. Import:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6ODIsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```python
 from ideahub_mcp.tools.candidates import CandidateItem, score_candidates_for_write
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Add a</span> <span data-proof="authored" data-by="ai:claude">`TaskContext`</span> <span data-proof="authored" data-by="ai:claude">model at module scope:</span>
+1. Add a `TaskContext` model at module scope:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6ODAsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```python
 class TaskContext(BaseModel):
     task_ref: str | None
     recent_ids: list[str]
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Extend</span> <span data-proof="authored" data-by="ai:claude">`CaptureOutput`:</span>
+1. Extend `CaptureOutput`:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NDgyLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 class CaptureOutput(BaseModel):
     id: str
     scope: str
@@ -1096,9 +1096,9 @@ class CaptureOutput(BaseModel):
     )
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Add a helper near the bottom of the file:</span>
+1. Add a helper near the bottom of the file:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NDM4LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 def _task_context(
     conn: sqlite3.Connection, task_ref: str | None, current_id: str
 ) -> TaskContext:
@@ -1112,9 +1112,9 @@ def _task_context(
     return TaskContext(task_ref=task_ref, recent_ids=[r[0] for r in rows])
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">In both return paths of</span> <span data-proof="authored" data-by="ai:claude">`capture_idea`, populate the new fields:</span>
+1. In both return paths of `capture_idea`, populate the new fields:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6Mzc4LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 cands = score_candidates_for_write(
     conn,
     content=input_.content,
@@ -1130,24 +1130,24 @@ return CaptureOutput(
 )
 ```
 
-<span data-proof="authored" data-by="ai:claude">For the dedup path, use</span> <span data-proof="authored" data-by="ai:claude">`dup[0]`</span> <span data-proof="authored" data-by="ai:claude">as the current id.</span>
+For the dedup path, use `dup[0]` as the current id.
 
-<span data-proof="authored" data-by="ai:claude">Do the equivalent wiring in</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/checkpoint.py`:</span>
+Do the equivalent wiring in `src/ideahub_mcp/tools/checkpoint.py`:
 
-* <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`TaskContext`</span> <span data-proof="authored" data-by="ai:claude">import/definition (reuse by importing from capture, or redefine; prefer importing:</span> <span data-proof="authored" data-by="ai:claude">`from ideahub_mcp.tools.capture import TaskContext`).</span>
+* Add `TaskContext` import/definition (reuse by importing from capture, or redefine; prefer importing: `from ideahub_mcp.tools.capture import TaskContext`).
 
-* <span data-proof="authored" data-by="ai:claude">Extend</span> <span data-proof="authored" data-by="ai:claude">`CheckpointOutput`</span> <span data-proof="authored" data-by="ai:claude">with</span> <span data-proof="authored" data-by="ai:claude">`annotate_candidates`,</span> <span data-proof="authored" data-by="ai:claude">`related_candidates`,</span> <span data-proof="authored" data-by="ai:claude">`task_context`.</span>
+* Extend `CheckpointOutput` with `annotate_candidates`, `related_candidates`, `task_context`.
 
-* <span data-proof="authored" data-by="ai:claude">Populate from</span> <span data-proof="authored" data-by="ai:claude">`score_candidates_for_write`.</span>
+* Populate from `score_candidates_for_write`.
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run tests to verify they pass</span>**
+**Step 4: Run tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_capture.py tests/test_checkpoint.py tests/test_candidates.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_capture.py tests/test_checkpoint.py tests/test_candidates.py -v`
+Expected: PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzkzLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/capture.py src/ideahub_mcp/tools/checkpoint.py tests/test_capture.py tests/test_checkpoint.py
 git commit -m "$(cat <<'EOF'
 Return annotate_candidates, related_candidates, and task_context from capture and checkpoint so the write itself carries the signal needed for the next memory move
@@ -1159,31 +1159,31 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 8: Default-exclude checkpoints from search, list, and dump</span>
+## Task 8: Default-exclude checkpoints from search, list, and dump
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/search.py`</span>
+* Modify: `src/ideahub_mcp/tools/search.py`
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/list_ideas.py`</span>
+* Modify: `src/ideahub_mcp/tools/list_ideas.py`
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/tools/dump.py`</span>
+* Modify: `src/ideahub_mcp/tools/dump.py`
 
-* <span data-proof="authored" data-by="ai:claude">Test:</span> <span data-proof="authored" data-by="ai:claude">`tests/test_search.py`,</span> <span data-proof="authored" data-by="ai:claude">`tests/test_list.py`,</span> <span data-proof="authored" data-by="ai:claude">`tests/test_dump.py`</span>
+* Test: `tests/test_search.py`, `tests/test_list.py`, `tests/test_dump.py`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing tests</span>**
+**Step 1: Write the failing tests**
 
-<span data-proof="authored" data-by="ai:claude">Append a test in each of the three test files that:</span>
+Append a test in each of the three test files that:
 
-* <span data-proof="authored" data-by="ai:claude">Seeds one</span> <span data-proof="authored" data-by="ai:claude">`idea`</span> <span data-proof="authored" data-by="ai:claude">row and one</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">row in the same scope with identical content terms.</span>
+* Seeds one `idea` row and one `checkpoint` row in the same scope with identical content terms.
 
-* <span data-proof="authored" data-by="ai:claude">Calls the tool with defaults and asserts only the</span> <span data-proof="authored" data-by="ai:claude">`idea`</span> <span data-proof="authored" data-by="ai:claude">is returned.</span>
+* Calls the tool with defaults and asserts only the `idea` is returned.
 
-* <span data-proof="authored" data-by="ai:claude">Calls the tool with</span> <span data-proof="authored" data-by="ai:claude">`include_checkpoints=True`</span> <span data-proof="authored" data-by="ai:claude">and asserts both are returned.</span>
+* Calls the tool with `include_checkpoints=True` and asserts both are returned.
 
-<span data-proof="authored" data-by="ai:claude">Example for</span> <span data-proof="authored" data-by="ai:claude">`tests/test_search.py`</span> <span data-proof="authored" data-by="ai:claude">(adapt fixtures to existing patterns):</span>
+Example for `tests/test_search.py` (adapt fixtures to existing patterns):
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NzUzLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 def test_search_default_excludes_checkpoints(conn: sqlite3.Connection, seeded_actor: str) -> None:
     conn.execute(
         "INSERT INTO idea (id, content, scope, actor_id, tags, created_at, kind) VALUES "
@@ -1203,38 +1203,38 @@ def test_search_default_excludes_checkpoints(conn: sqlite3.Connection, seeded_ac
     assert {"i1", "c1"}.issubset(ids2)
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run the tests to verify they fail</span>**
+**Step 2: Run the tests to verify they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_search.py tests/test_list.py tests/test_dump.py -v -k checkpoint`
-Expected: FAIL.</span>
+Run: `uv run pytest tests/test_search.py tests/test_list.py tests/test_dump.py -v -k checkpoint`
+Expected: FAIL.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Implement the filters</span>**
+**Step 3: Implement the filters**
 
-<span data-proof="authored" data-by="ai:claude">In each of the three input models (`SearchInput`,</span> <span data-proof="authored" data-by="ai:claude">`ListInput`,</span> <span data-proof="authored" data-by="ai:claude">`DumpInput`), add:</span>
+In each of the three input models (`SearchInput`, `ListInput`, `DumpInput`), add:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzMsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```python
 include_checkpoints: bool = False
 ```
 
-<span data-proof="authored" data-by="ai:claude">In each query, add one line:</span>
+In each query, add one line:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTY0LCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```python
 if not input_.include_checkpoints:
     where.append("i.kind = 'idea'")   # search.py uses alias `i`
 # or for list/dump (no alias):
     where.append("kind = 'idea'")
 ```
 
-<span data-proof="authored" data-by="ai:claude">For</span> <span data-proof="authored" data-by="ai:claude">`search.py`, the FTS join already uses alias</span> <span data-proof="authored" data-by="ai:claude">`i`, so</span> <span data-proof="authored" data-by="ai:claude">`i.kind = 'idea'`</span> <span data-proof="authored" data-by="ai:claude">is the right form.</span>
+For `search.py`, the FTS join already uses alias `i`, so `i.kind = 'idea'` is the right form.
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run tests to verify they pass</span>**
+**Step 4: Run tests to verify they pass**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_search.py tests/test_list.py tests/test_dump.py -v`
-Expected: PASS.</span>
+Run: `uv run pytest tests/test_search.py tests/test_list.py tests/test_dump.py -v`
+Expected: PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NDIyLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/tools/search.py src/ideahub_mcp/tools/list_ideas.py src/ideahub_mcp/tools/dump.py tests/test_search.py tests/test_list.py tests/test_dump.py
 git commit -m "$(cat <<'EOF'
 Default-exclude checkpoints from search, list, and dump so cheap working traces do not bleed into orientation surfaces; opt in with include_checkpoints
@@ -1246,38 +1246,38 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 9: Server wiring — register checkpoint, thread task_ref, rewrite descriptions</span>
+## Task 9: Server wiring — register checkpoint, thread task_ref, rewrite descriptions
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/server.py`</span>
+* Modify: `src/ideahub_mcp/server.py`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Write the failing test</span>**
+**Step 1: Write the failing test**
 
-<span data-proof="authored" data-by="ai:claude">This task is exercised by the existing</span> <span data-proof="authored" data-by="ai:claude">`tests/test_server_smoke.py`</span> <span data-proof="authored" data-by="ai:claude">and</span> <span data-proof="authored" data-by="ai:claude">`tests/test_protocol_smoke.py`. Update the expected tool set first:</span>
+This task is exercised by the existing `tests/test_server_smoke.py` and `tests/test_protocol_smoke.py`. Update the expected tool set first:
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`tests/test_server_smoke.py`, change</span> <span data-proof="authored" data-by="ai:claude">`EXPECTED_TOOLS`-equivalent assertion to include</span> <span data-proof="authored" data-by="ai:claude">`"checkpoint"`.</span>
+In `tests/test_server_smoke.py`, change `EXPECTED_TOOLS`-equivalent assertion to include `"checkpoint"`.
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`tests/test_protocol_smoke.py`, add</span> <span data-proof="authored" data-by="ai:claude">`"checkpoint"`</span> <span data-proof="authored" data-by="ai:claude">to</span> <span data-proof="authored" data-by="ai:claude">`EXPECTED_TOOLS`.</span>
+In `tests/test_protocol_smoke.py`, add `"checkpoint"` to `EXPECTED_TOOLS`.
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Run to confirm they fail</span>**
+**Step 2: Run to confirm they fail**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest tests/test_server_smoke.py tests/test_protocol_smoke.py -v`
-Expected: FAIL —</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">not registered.</span>
+Run: `uv run pytest tests/test_server_smoke.py tests/test_protocol_smoke.py -v`
+Expected: FAIL — `checkpoint` not registered.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Wire the server</span>**
+**Step 3: Wire the server**
 
-<span data-proof="authored" data-by="ai:claude">In</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/server.py`:</span>
+In `src/ideahub_mcp/server.py`:
 
-1. <span data-proof="authored" data-by="ai:claude">Import:</span>
+1. Import:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NzMsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```python
 from ideahub_mcp.tools.checkpoint import CheckpointInput, checkpoint_idea
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Register a</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">tool with this description:</span>
+1. Register a `checkpoint` tool with this description:
 
-```python proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTU0MSwiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```python
 @mcp.tool(
     description=(
         "Write a lightweight working-memory trace during a task. "
@@ -1319,8 +1319,8 @@ def checkpoint(
     return out.model_dump()
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">parameter to</span> <span data-proof="authored" data-by="ai:claude">`capture`,</span> <span data-proof="authored" data-by="ai:claude">`annotate`, and</span> <span data-proof="authored" data-by="ai:claude">`link`</span> <span data-proof="authored" data-by="ai:claude">tool wrappers. Thread it into each</span> <span data-proof="authored" data-by="ai:claude">`*Input(...)`.</span>
-2. <span data-proof="authored" data-by="ai:claude">Rewrite the</span> <span data-proof="authored" data-by="ai:claude">`capture`</span> <span data-proof="authored" data-by="ai:claude">description:</span>
+1. Add `task_ref` parameter to `capture`, `annotate`, and `link` tool wrappers. Thread it into each `*Input(...)`.
+2. Rewrite the `capture` description:
 
 ```
 "Capture a new durable idea. "
@@ -1334,7 +1334,7 @@ def checkpoint(
 "Idempotent within 5 seconds on identical content."
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Rewrite the</span> <span data-proof="authored" data-by="ai:claude">`annotate`</span> <span data-proof="authored" data-by="ai:claude">description:</span>
+1. Rewrite the `annotate` description:
 
 ```
 "Append a note to an existing idea when current work confirms, sharpens, corrects, or "
@@ -1345,7 +1345,7 @@ def checkpoint(
 "follow-up, question, correction). Optional `task_ref` groups all writes from the same task."
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Rewrite the</span> <span data-proof="authored" data-by="ai:claude">`link`</span> <span data-proof="authored" data-by="ai:claude">description:</span>
+1. Rewrite the `link` description:
 
 ```
 "Connect two ideas when current work reveals they are structurally related, evolved, "
@@ -1355,16 +1355,16 @@ def checkpoint(
 "from the same task."
 ```
 
-1. <span data-proof="authored" data-by="ai:claude">Add</span> <span data-proof="authored" data-by="ai:claude">`"checkpoint"`</span> <span data-proof="authored" data-by="ai:claude">to the</span> <span data-proof="authored" data-by="ai:claude">`tool_names`</span> <span data-proof="authored" data-by="ai:claude">tuple used by the</span> <span data-proof="authored" data-by="ai:claude">`ideahub://status`</span> <span data-proof="authored" data-by="ai:claude">resource.</span>
+1. Add `"checkpoint"` to the `tool_names` tuple used by the `ideahub://status` resource.
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Run full suite</span>**
+**Step 4: Run full suite**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span> <span data-proof="authored" data-by="ai:claude">`uv run pytest -q && uv run ruff check . && uv run pyright`
-Expected: all PASS.</span>
+Run: `uv run pytest -q && uv run ruff check . && uv run pyright`
+Expected: all PASS.
 
-**<span data-proof="authored" data-by="ai:claude">Step 5: Commit</span>**
+**Step 5: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MzczLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add src/ideahub_mcp/server.py tests/test_server_smoke.py tests/test_protocol_smoke.py
 git commit -m "$(cat <<'EOF'
 Register the checkpoint tool, thread task_ref through every write-path tool, and rewrite descriptions normatively so a model reading the tool set cold can tell which verb to use
@@ -1376,26 +1376,26 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 10: README update</span>
+## Task 10: README update
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`README.md`</span>
+* Modify: `README.md`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Update the tool table</span>**
+**Step 1: Update the tool table**
 
-<span data-proof="authored" data-by="ai:claude">Add a</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">row near</span> <span data-proof="authored" data-by="ai:claude">`capture`:</span>
+Add a `checkpoint` row near `capture`:
 
-| <span data-proof="authored" data-by="ai:claude">Tool</span>         | <span data-proof="authored" data-by="ai:claude">One-liner</span>                                                                               |
+| Tool         | One-liner                                                                               |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| <span data-proof="authored" data-by="ai:claude">`capture`</span>    | <span data-proof="authored" data-by="ai:claude">Durable idea. Use when work produces something worth preserving beyond the task.</span>        |
-| <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> | <span data-proof="authored" data-by="ai:claude">Lightweight working-memory trace. Use mid-task for observations, decisions, next steps.</span> |
+| `capture`    | Durable idea. Use when work produces something worth preserving beyond the task.        |
+| `checkpoint` | Lightweight working-memory trace. Use mid-task for observations, decisions, next steps. |
 
-<span data-proof="authored" data-by="ai:claude">Add a short "Writeback loop" paragraph under Discovery And Health or as its own section, explaining the two-tier write path and the</span> <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">convention. Keep it to ~8 lines. No new doc file.</span>
+Add a short "Writeback loop" paragraph under Discovery And Health or as its own section, explaining the two-tier write path and the `task_ref` convention. Keep it to ~8 lines. No new doc file.
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Commit</span>**
+**Step 2: Commit**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MjUxLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 git add README.md
 git commit -m "$(cat <<'EOF'
 Document the two-tier write path and the task_ref convention so readers coming in cold understand why there are two write verbs
@@ -1407,37 +1407,37 @@ EOF
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Task 11: Version bump, tag, release</span>
+## Task 11: Version bump, tag, release
 
-**<span data-proof="authored" data-by="ai:claude">Files:</span>**
+**Files:**
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`src/ideahub_mcp/__init__.py`</span>
+* Modify: `src/ideahub_mcp/__init__.py`
 
-* <span data-proof="authored" data-by="ai:claude">Modify:</span> <span data-proof="authored" data-by="ai:claude">`pyproject.toml`</span>
+* Modify: `pyproject.toml`
 
-**<span data-proof="authored" data-by="ai:claude">Step 1: Bump version</span>**
+**Step 1: Bump version**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTUzLCJhdHRycyI6eyJieSI6ImFpOmNsYXVkZSJ9fV0=
+```bash
 sed -i '' 's/__version__ = "0.1.2"/__version__ = "0.2.0"/' src/ideahub_mcp/__init__.py
 sed -i '' 's/^version = "0.1.2"/version = "0.2.0"/' pyproject.toml
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 2: Full preflight</span>**
+**Step 2: Full preflight**
 
-<span data-proof="authored" data-by="ai:claude">Run:</span>
+Run:
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NjUsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```bash
 uv sync --dev
 uv run ruff check .
 uv run pyright
 uv run pytest -q
 ```
 
-<span data-proof="authored" data-by="ai:claude">Expected: all green.</span>
+Expected: all green.
 
-**<span data-proof="authored" data-by="ai:claude">Step 3: Commit, tag, push, release</span>**
+**Step 3: Commit, tag, push, release**
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6MTIyNywiYXR0cnMiOnsiYnkiOiJhaTpjbGF1ZGUifX1d
+```bash
 git add src/ideahub_mcp/__init__.py pyproject.toml
 git commit -m "$(cat <<'EOF'
 Bump to 0.2.0 for the writeback-loop release: checkpoint tool, uniform task_ref across write verbs, and candidate-surfacing returns
@@ -1462,43 +1462,43 @@ EOF
 )"
 ```
 
-**<span data-proof="authored" data-by="ai:claude">Step 4: Reinstall locally</span>**
+**Step 4: Reinstall locally**
 
-<span data-proof="authored" data-by="ai:claude">Once the PyPI publish workflow goes green:</span>
+Once the PyPI publish workflow goes green:
 
-```bash proof:W3sidHlwZSI6InByb29mQXV0aG9yZWQiLCJmcm9tIjowLCJ0byI6NzMsImF0dHJzIjp7ImJ5IjoiYWk6Y2xhdWRlIn19XQ==
+```bash
 uv tool upgrade ideahub-mcp
 # or: uv tool install --reinstall ideahub-mcp
 ```
 
-<span data-proof="authored" data-by="ai:claude">Then restart any MCP host holding the old process.</span>
+Then restart any MCP host holding the old process.
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">Post-Merge Verification</span>
+## Post-Merge Verification
 
-<span data-proof="authored" data-by="ai:claude">After the release tag lands and PyPI publishes:</span>
+After the release tag lands and PyPI publishes:
 
-1. <span data-proof="authored" data-by="ai:claude">In a scratch directory,</span> <span data-proof="authored" data-by="ai:claude">`uv tool run ideahub-mcp`</span> <span data-proof="authored" data-by="ai:claude">via an MCP client (Claude Code or Codex).</span>
-2. <span data-proof="authored" data-by="ai:claude">Initialize. Confirm</span> <span data-proof="authored" data-by="ai:claude">`serverInfo.version == "0.2.0"`.</span>
-3. <span data-proof="authored" data-by="ai:claude">Call</span> <span data-proof="authored" data-by="ai:claude">`list_tools`. Confirm</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">is present and the descriptions match the plan.</span>
-4. <span data-proof="authored" data-by="ai:claude">Call</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">with a</span> <span data-proof="authored" data-by="ai:claude">`task_ref`. Confirm the response includes</span> <span data-proof="authored" data-by="ai:claude">`annotate_candidates`,</span> <span data-proof="authored" data-by="ai:claude">`related_candidates`, and</span> <span data-proof="authored" data-by="ai:claude">`task_context`.</span>
-5. <span data-proof="authored" data-by="ai:claude">Read</span> <span data-proof="authored" data-by="ai:claude">`ideahub://status`. Confirm</span> <span data-proof="authored" data-by="ai:claude">`tools`</span> <span data-proof="authored" data-by="ai:claude">includes</span> <span data-proof="authored" data-by="ai:claude">`"checkpoint"`.</span>
+1. In a scratch directory, `uv tool run ideahub-mcp` via an MCP client (Claude Code or Codex).
+2. Initialize. Confirm `serverInfo.version == "0.2.0"`.
+3. Call `list_tools`. Confirm `checkpoint` is present and the descriptions match the plan.
+4. Call `checkpoint` with a `task_ref`. Confirm the response includes `annotate_candidates`, `related_candidates`, and `task_context`.
+5. Read `ideahub://status`. Confirm `tools` includes `"checkpoint"`.
 
-<span data-proof="authored" data-by="ai:claude">If any of those fail, the release is a rollback candidate — bump to 0.2.1 with the fix rather than retagging 0.2.0.</span>
+If any of those fail, the release is a rollback candidate — bump to 0.2.1 with the fix rather than retagging 0.2.0.
 
 ***
 
-## <span data-proof="authored" data-by="ai:claude">What Success Looks Like</span>
+## What Success Looks Like
 
-<span data-proof="authored" data-by="ai:claude">The test is qualitative and observable in live use:</span>
+The test is qualitative and observable in live use:
 
-* <span data-proof="authored" data-by="ai:claude">The model uses</span> <span data-proof="authored" data-by="ai:claude">`checkpoint`</span> <span data-proof="authored" data-by="ai:claude">during substantial work without being told.</span>
+* The model uses `checkpoint` during substantial work without being told.
 
-* <span data-proof="authored" data-by="ai:claude">Many checkpoints collapse into</span> <span data-proof="authored" data-by="ai:claude">`annotate`</span> <span data-proof="authored" data-by="ai:claude">calls because</span> <span data-proof="authored" data-by="ai:claude">`annotate_candidates`</span> <span data-proof="authored" data-by="ai:claude">surfaced the right target.</span>
+* Many checkpoints collapse into `annotate` calls because `annotate_candidates` surfaced the right target.
 
-* <span data-proof="authored" data-by="ai:claude">Durable</span> <span data-proof="authored" data-by="ai:claude">`capture`</span> <span data-proof="authored" data-by="ai:claude">calls become fewer and higher-signal.</span>
+* Durable `capture` calls become fewer and higher-signal.
 
-* <span data-proof="authored" data-by="ai:claude">`task_ref`</span> <span data-proof="authored" data-by="ai:claude">lets a human or model reconstruct a session's memory stream cleanly.</span>
+* `task_ref` lets a human or model reconstruct a session's memory stream cleanly.
 
-<span data-proof="authored" data-by="ai:claude">If those behaviors do not emerge on first run, the next adjustment is candidate scoring — not the tool surface.</span>
+If those behaviors do not emerge on first run, the next adjustment is candidate scoring — not the tool surface.
