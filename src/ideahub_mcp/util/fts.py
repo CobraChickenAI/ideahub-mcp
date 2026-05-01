@@ -1,23 +1,18 @@
-"""Single chokepoint for building FTS5 MATCH queries.
-
-Every caller that wants to run an FTS5 MATCH must come through here. The
-lint test in tests/test_lint.py enforces this — any other module containing
-`idea_fts MATCH` will fail the build.
+"""FTS5 query helpers.
 
 Two modes:
 
 - ``sanitize_fts_query`` — extracts alphanumeric tokens, quotes each, joins
   with OR. Hyphens and other FTS5 operators become inert. This is the right
   default for a "search" verb where the query is content, not syntax.
-- ``raw_fts_query`` — passes the query through, but validates syntax against
-  a throwaway in-memory FTS5 table first so a malformed query fails loud
-  with ``IdeaHubError`` instead of silently returning empty.
+- ``raw_fts_query`` — passes the query through, validating only that it is
+  non-empty. Syntax errors from FTS5 surface at the actual query site;
+  callers wrap that exception into ``IdeaHubError`` for loud failure.
 """
 
 from __future__ import annotations
 
 import re
-import sqlite3
 
 from ideahub_mcp.errors import IdeaHubError
 
@@ -28,16 +23,6 @@ from ideahub_mcp.errors import IdeaHubError
 _FTS_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 _MAX_TOKENS = 20
 _MIN_TOKEN_LEN = 3
-
-
-def fts_match_clause() -> str:
-    """Return the canonical FTS5 MATCH SQL fragment.
-
-    Callers must use this helper rather than inlining the literal so that
-    the lint guard (tests/test_lint.py) catches any module that builds an
-    FTS5 query without routing through this file.
-    """
-    return "idea_fts MATCH ?"
 
 
 def sanitize_fts_query(text: str) -> str:
@@ -66,11 +51,10 @@ def sanitize_fts_query(text: str) -> str:
 
 
 def raw_fts_query(text: str) -> str:
-    """Validate ``text`` as an FTS5 MATCH expression; raise on syntax error.
+    """Validate that ``text`` is a non-empty raw FTS5 MATCH expression.
 
-    Uses a throwaway in-memory FTS5 table so syntax errors surface as
-    ``IdeaHubError`` rather than the silent empty-result that FTS5
-    otherwise returns for some edge cases.
+    Syntax errors are caught at the call site by wrapping the actual query
+    in a try/except — that's loud failure without a probing round-trip.
     """
     if not text or not text.strip():
         raise IdeaHubError(
@@ -78,20 +62,4 @@ def raw_fts_query(text: str) -> str:
             message="Empty query in raw mode.",
             fix="Pass a non-empty FTS5 expression, or use query_mode='auto'.",
         )
-    probe = sqlite3.connect(":memory:")
-    try:
-        probe.execute("CREATE VIRTUAL TABLE t USING fts5(c)")
-        try:
-            probe.execute("SELECT 1 FROM t WHERE t MATCH ?", (text,)).fetchall()
-        except sqlite3.OperationalError as exc:
-            raise IdeaHubError(
-                code="invalid_query",
-                message=f"FTS5 syntax error: {exc}",
-                fix=(
-                    "Fix the FTS5 expression, or use query_mode='auto' to let "
-                    "the server tokenize and quote the query for you."
-                ),
-            ) from exc
-    finally:
-        probe.close()
     return text
