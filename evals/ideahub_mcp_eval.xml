@@ -1,0 +1,62 @@
+<evaluation>
+  <!--
+  Each question is independent, read-only against the seed corpus produced by
+  evals/seed_corpus.py, and verifiable by string comparison. Answers are
+  stable across reseeds because the seed builder uses hand-picked ULIDs and
+  frozen timestamps.
+
+  All questions assume the agent points the server at the seed store via
+  IDEAHUB_MCP_HOME. None require capture/checkpoint/promote/archive/link/
+  annotate calls.
+  -->
+
+  <qa_pair>
+    <question>Using ideahub_mcp, count the live (non-archived) ideas in scope `repo:demo` whose tags include `coherence`. Exclude checkpoints. How many are there?</question>
+    <answer>4</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, find the idea in scope `repo:demo` whose content begins with "Initial draft of TML primitives". Which idea ULID supersedes it (via an idea_link of kind `supersedes`)?</question>
+    <answer>00000000000000000000000007</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, what is the link kind connecting the idea with ULID `00000000000000000000000001` to the idea with ULID `00000000000000000000000002`? Answer with one of: related, supersedes, evolved_from, duplicate.</question>
+    <answer>related</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using ideahub_mcp's default search mode, search for the phrase `fail-closed execution` against the live, non-checkpoint ideas. How many hits are returned?</question>
+    <answer>4</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, which live idea ULID in scope `repo:demo` has the most attached notes? Return the ULID.</question>
+    <answer>00000000000000000000000007</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using ideahub_mcp's `related` tool, find the live idea with the strongest tag overlap to the idea with ULID `00000000000000000000000007` (within scope `repo:demo`, excluding checkpoints). Return that related idea's ULID.</question>
+    <answer>0000000000000000000000000E</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, count the checkpoints (kind='checkpoint') whose `task_ref` is `writeback-phase-1`. Use whichever read-only tool exposes them. How many are there?</question>
+    <answer>3</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using ideahub_mcp, count the live (non-archived, non-checkpoint) ideas in scope `repo:demo` whose actor is `human:alice`. How many are there?</question>
+    <answer>5</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, the only archived idea in scope `repo:demo` carries an `archive` note recording the reason it was archived. What is the exact note content (the archive reason)?</question>
+    <answer>Superseded by current TML positioning baseline.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In ideahub_mcp, the idea with ULID `00000000000000000000000007` has exactly one outbound link of kind `related`. What is the target idea's ULID?</question>
+    <answer>0000000000000000000000000E</answer>
+  </qa_pair>
+</evaluation>
