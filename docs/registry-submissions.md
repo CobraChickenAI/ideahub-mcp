@@ -33,7 +33,7 @@ Submit via the web UI at [https://smithery.ai/new](https://smithery.ai/new) (req
 
 **Fields:**
 
-* **Repository**: `CobraChickenAI/ideahub-mcp`
+* **Repository**: `CobraChickenAI/ideahub_mcp`
 
 * **Display name**: `ideahub_mcp`
 
