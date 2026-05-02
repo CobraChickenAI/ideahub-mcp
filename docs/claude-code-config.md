@@ -7,7 +7,7 @@ Add to `~/.claude/settings.json` under `mcpServers`:
   "mcpServers": {
     "ideahub": {
       "command": "uv",
-      "args": ["--directory", "/Users/you/Cowork/ideahub-mcp", "run", "ideahub_mcp"],
+      "args": ["--directory", "/Users/you/Cowork/ideahub_mcp", "run", "ideahub_mcp"],
       "env": {
         "IDEAHUB_MCP_HOME": "/Users/you/.ideahub_mcp",
         "IDEAHUB_ACTOR": "human:you"
