@@ -1,4 +1,4 @@
-# ideahub-mcp
+# ideahub_mcp
 
 An agent-first [MCP](https://modelcontextprotocol.io) server for capturing and recalling ideas — the agent's and their human's.
 
@@ -24,7 +24,7 @@ The primary user is a model. Tools are short, imperative, example-laden; errors 
 
 ## Writeback Loop
 
-`ideahub-mcp` is designed to behave like working memory for an agent, not just searchable storage. Two write verbs close that loop:
+`ideahub_mcp` is designed to behave like working memory for an agent, not just searchable storage. Two write verbs close that loop:
 
 - `capture` writes a durable idea that should survive the task.
 - `checkpoint` writes a lightweight in-flight trace — observations, decisions, assumptions, open questions — without the semantic weight of a full idea.
@@ -54,7 +54,7 @@ For phrase queries, `NEAR`, or column-qualified syntax, pass `query_mode='raw'`.
 
 ## Discovery And Health
 
-`ideahub-mcp` is intentionally tool-first, not resource-first. A client may show a healthy connection even when `list_resources()` is sparse or empty.
+`ideahub_mcp` is intentionally tool-first, not resource-first. A client may show a healthy connection even when `list_resources()` is sparse or empty.
 
 To make discovery cheap and host-agnostic, the server exposes:
 
@@ -68,8 +68,8 @@ For the full compatibility rubric, see [docs/mcp-health.md](docs/mcp-health.md).
 ## Install
 
 ```bash
-uvx ideahub-mcp        # try it
-uv tool install ideahub-mcp   # keep it around
+uvx ideahub_mcp        # try it
+uv tool install ideahub_mcp   # keep it around
 ```
 
 ## Claude Code
@@ -81,9 +81,9 @@ Add to `~/.claude/settings.json`:
   "mcpServers": {
     "ideahub": {
       "command": "uvx",
-      "args": ["ideahub-mcp"],
+      "args": ["ideahub_mcp"],
       "env": {
-        "IDEAHUB_MCP_HOME": "/Users/you/.ideahub-mcp",
+        "IDEAHUB_MCP_HOME": "/Users/you/.ideahub_mcp",
         "IDEAHUB_ACTOR": "human:you"
       }
     }
@@ -95,7 +95,7 @@ Add to `~/.claude/settings.json`:
 
 | Var                | Default            | Purpose                                          |
 | ------------------ | ------------------ | ------------------------------------------------ |
-| `IDEAHUB_MCP_HOME` | `~/.ideahub-mcp/`  | Data directory (SQLite store, logs, backups).    |
+| `IDEAHUB_MCP_HOME` | `~/.ideahub_mcp/`  | Data directory (SQLite store, logs, backups).    |
 | `IDEAHUB_ACTOR`    | —                  | Fallback actor id (`human:you` or `agent:name`). |
 | `IDEAHUB_SCOPE`    | —                  | Fallback scope when cwd isn't a git repo.        |
 
