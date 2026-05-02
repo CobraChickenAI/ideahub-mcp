@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from ideahub_mcp.tools._shared import TaskContext, suggest_tags, task_context
 from ideahub_mcp.tools.candidates import CandidateItem, candidates_or_empty
-from ideahub_mcp.tools.capture import TaskContext
 from ideahub_mcp.util.clock import utcnow_iso
 from ideahub_mcp.util.coerce import normalize_task_ref
 from ideahub_mcp.util.hashing import compute_content_hash
@@ -52,32 +52,6 @@ class CheckpointOutput(BaseModel):
     )
 
 
-def _suggest_tags(conn: sqlite3.Connection, content: str, limit: int = 5) -> list[str]:
-    rows = conn.execute("SELECT tags FROM idea WHERE tags != '[]'").fetchall()
-    known: set[str] = set()
-    for (tags_json,) in rows:
-        try:
-            known.update(json.loads(tags_json))
-        except json.JSONDecodeError:
-            continue
-    lowered = content.lower()
-    return sorted([t for t in known if t.lower() in lowered])[:limit]
-
-
-# Intentionally duplicated in capture.py — keep in sync.
-def _task_context(
-    conn: sqlite3.Connection, task_ref: str | None, current_id: str
-) -> TaskContext:
-    if not task_ref:
-        return TaskContext(task_ref=None, recent_ids=[])
-    rows = conn.execute(
-        "SELECT id FROM idea WHERE task_ref = ? AND id != ? "
-        "ORDER BY created_at DESC LIMIT 10",
-        (task_ref, current_id),
-    ).fetchall()
-    return TaskContext(task_ref=task_ref, recent_ids=[r[0] for r in rows])
-
-
 def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> CheckpointOutput:
     new_id = new_ulid()
     now = utcnow_iso()
@@ -117,9 +91,9 @@ def checkpoint_idea(conn: sqlite3.Connection, input_: CheckpointInput) -> Checkp
         originator=input_.originator,
         created_at=now,
         task_ref=input_.task_ref,
-        suggested_tags=_suggest_tags(conn, input_.content),
+        suggested_tags=suggest_tags(conn, input_.content),
         actor_created=input_.actor_created,
         annotate_candidates=cands.annotate_candidates,
         related_candidates=cands.related_candidates,
-        task_context=_task_context(conn, input_.task_ref, new_id),
+        task_context=task_context(conn, input_.task_ref, new_id),
     )
