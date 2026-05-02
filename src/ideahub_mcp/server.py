@@ -32,7 +32,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "storage" / "migrations"
 
 
 def home() -> Path:
-    return Path(os.getenv("IDEAHUB_MCP_HOME") or Path.home() / ".ideahub-mcp").expanduser()
+    return Path(os.getenv("IDEAHUB_MCP_HOME") or Path.home() / ".ideahub_mcp").expanduser()
 
 
 def _open_live(store: Path) -> sqlite3.Connection:
@@ -54,7 +54,7 @@ def build_server() -> FastMCP:
     if existed:
         snapshot_store(store, h / "backups")
 
-    mcp = FastMCP("ideahub-mcp", version=__version__)
+    mcp = FastMCP("ideahub_mcp", version=__version__)
 
     tool_names = (
         "capture", "checkpoint", "promote", "dump", "search", "list", "get",
@@ -64,7 +64,7 @@ def build_server() -> FastMCP:
     @mcp.resource("ideahub://status")
     def status_resource() -> dict:
         return {
-            "name": "ideahub-mcp",
+            "name": "ideahub_mcp",
             "version": __version__,
             "store": str(store),
             "home": str(h),
@@ -74,13 +74,19 @@ def build_server() -> FastMCP:
     @mcp.tool(
         description=(
             "Cheap health probe. Returns server name, package version, and store path. "
-            "Use to confirm the ideahub-mcp server is connected and responsive."
-        )
+            "Use to confirm the ideahub_mcp server is connected and responsive."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def ping() -> dict:
         return {
             "ok": True,
-            "name": "ideahub-mcp",
+            "name": "ideahub_mcp",
             "version": __version__,
             "store": str(store),
         }
@@ -127,7 +133,13 @@ def build_server() -> FastMCP:
             "content with the same SHA-256 hash (whitespace-collapsed, lowercased) in "
             "the same scope dedupes against the original idea — incoming tags are "
             "merged in and a `dup_attempt` note is appended for provenance."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def capture(
         content: str,
@@ -174,7 +186,13 @@ def build_server() -> FastMCP:
             "annotate/related suggestions are returned — set to 0 for a fire-and-forget "
             "trace where you don't intend to act on suggestions, or raise to 10 when "
             "actively triaging."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
     )
     def checkpoint(
         content: str,
@@ -213,7 +231,13 @@ def build_server() -> FastMCP:
             "Newest ideas first, latest note inlined by default, archived excluded by default. "
             "By default excludes kind='checkpoint' rows; pass "
             "include_checkpoints=True to include them."
-        )
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def dump(
         scope: str | None = None,
@@ -254,7 +278,13 @@ def build_server() -> FastMCP:
             "kebab-case identifiers like task_refs or branch names); 'raw' passes the "
             "query through unchanged for FTS5 phrase, NEAR, or column-qualified syntax "
             "and raises a loud error on syntax failure."
-        )
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def search(
         query: str,
@@ -287,7 +317,13 @@ def build_server() -> FastMCP:
             "Archived excluded by default. "
             "By default excludes kind='checkpoint' rows; pass "
             "include_checkpoints=True to include them."
-        )
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def list(  # noqa: A001
         scope: str | None = None,
@@ -319,7 +355,15 @@ def build_server() -> FastMCP:
         )
         return out.model_dump()
 
-    @mcp.tool(description="Get a single idea by id with its notes and outbound links.")
+    @mcp.tool(
+        description="Get a single idea by id with its notes and outbound links.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def get(id: str) -> dict:  # noqa: A002
         c = _open_live(store)
         return get_idea(c, GetInput(id=id)).model_dump()
@@ -331,7 +375,13 @@ def build_server() -> FastMCP:
             "Within source scope unless cross_scope=True; archived excluded by default. "
             "By default excludes kind='checkpoint' rows; pass "
             "include_checkpoints=True to include them."
-        )
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def related(
         id: str,  # noqa: A002
@@ -363,7 +413,13 @@ def build_server() -> FastMCP:
             "observation, follow-up, question, correction). Optional `task_ref` groups "
             "all writes from the same task and is normalized to lowercase kebab-case "
             "at the boundary."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
     )
     def annotate(
         id: str,  # noqa: A002
@@ -396,7 +452,13 @@ def build_server() -> FastMCP:
             "task_ref groupings carry forward unchanged. A `kind='promotion'` note "
             "records the original `kind_label` for provenance. "
             "Promotion is one-way: an idea cannot be demoted back to a checkpoint."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
     )
     def promote(
         id: str,  # noqa: A002
@@ -413,7 +475,13 @@ def build_server() -> FastMCP:
         description=(
             "Archive an idea (sets archived_at, writes kind='archive' note with reason). "
             "Idempotent. Archived ideas are excluded by default from list/search/dump."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def archive(
         id: str,  # noqa: A002
@@ -435,7 +503,13 @@ def build_server() -> FastMCP:
             "canonicalized (smaller id becomes source). Self-links rejected. Optional "
             "`task_ref` groups all writes from the same task and is normalized to "
             "lowercase kebab-case at the boundary."
-        )
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def link(
         source_id: str,
@@ -457,7 +531,13 @@ def build_server() -> FastMCP:
     @mcp.tool(
         description=(
             "Inspect the actor table. Pass id for detail on one actor; omit to list all."
-        )
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     def recognize(id: str | None = None) -> dict:  # noqa: A002
         c = _open_live(store)
