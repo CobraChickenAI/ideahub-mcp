@@ -35,7 +35,7 @@ In MCP host config (Claude Code, Codex, etc.):
   "mcpServers": {
     "ideahub_eval": {
       "command": "uv",
-      "args": ["--directory", "/abs/path/to/ideahub-mcp", "run", "ideahub_mcp"],
+      "args": ["--directory", "/abs/path/to/ideahub_mcp", "run", "ideahub_mcp"],
       "env": {
         "IDEAHUB_MCP_HOME": "/tmp/ideahub_eval",
         "IDEAHUB_ACTOR": "human:eval"
