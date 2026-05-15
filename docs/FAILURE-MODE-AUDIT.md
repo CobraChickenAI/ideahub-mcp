@@ -1,14 +1,21 @@
 # IdeaHub-MCP — Failure Mode Audit and Compound Resolutions
 
-**Status:** Draft. Pre-implementation. Each pattern fixes the symptom AND installs a structural guard so the class of bug becomes self-detecting or self-preventing.
+**Status:** Partially reconciled. Each pattern fixes the symptom AND installs a structural guard so the class of bug becomes self-detecting or self-preventing.
+
+**Last reconciled:** 2026-05-02
+**Repo state:** v0.4.0, four migrations applied (`001_init.sql`, `002_kind_and_task_ref.sql`, `003_checkpoint_kind_label.sql`, `004_content_hash.sql`).
+
+**Shipped:** P1 (immediate fix only), P2 (immediate fix only), P3, P5, P6, P7 — all landed in v0.3.0. Tool annotations, helper dedup, and identifier normalization shipped in v0.4.0 (post-eval hygiene, not audit-driven).
+
+**Open:** P1 structural guard (candidate utilization telemetry), P2 structural guard (task_ref alias surface + nearby_task_refs in writeback), P4 (orphan / staleness detection + corpus_health envelope).
 
 The standard: a one-line patch that makes the immediate test pass is not a resolution. A resolution closes the door behind itself.
-
-Repository state assumed: `src/ideahub_mcp/` at v0.2.1, three migrations applied (`001_init.sql`, `002_kind_and_task_ref.sql`, `003_checkpoint_kind_label.sql`).
 
 ---
 
 ## P1 — Token overhead on the writeback loop
+
+🟡 **Partially shipped v0.3.0** (commits `0339bdb` / `ae6fe81`) — `candidates` parameter promoted to the tool surface with `0` as opt-out. Structural guard (candidate_offer telemetry table + utilization-driven default tuning) **not shipped**.
 
 ### Diagnosis
 
@@ -82,6 +89,8 @@ CREATE INDEX candidate_offer_consumed_idx
 
 ## P2 — `task_ref` sprawl
 
+🟡 **Partially shipped v0.3.0** (commit `e856b6a`) — `normalize_task_ref` collapses the lexical sprawl at the input boundary. Structural guard (task_ref_alias table, `nearby_task_refs` field on the writeback envelope, `task_ref_alias_of` write parameter) **not shipped**.
+
 ### Diagnosis
 
 `task_ref` is a free-form `TEXT` column (`002_kind_and_task_ref.sql:3`) with no normalization, no taxonomy, and no near-duplicate detection. The Pydantic validator on `CaptureInput.task_ref` (`tools/capture.py:28-33`) only coerces empty string to None. Two sessions working the same problem will produce `"writeback-phase-1"` and `"writeback_phase_1"` and `"writeback phase 1"` and the corpus is silently partitioned into three subgraphs that all look connected from inside themselves.
@@ -151,6 +160,8 @@ CREATE INDEX task_ref_alias_alias_idx     ON task_ref_alias (alias);
 ---
 
 ## P3 — FTS5 hyphen-as-syntax collision
+
+✅ **Shipped v0.3.0** (commit `a4e151a`) — `util/fts.py` chokepoint with `sanitize_fts_query` and `raw_fts_query`; auto/raw mode on the `search` tool. The lint guard from the structural-guard section was tried and **subsequently removed** (commit `55498f6`) as pseudo-safety any caller could route around by re-importing; the chokepoint is enforced by architecture, not by a grep.
 
 ### Diagnosis
 
@@ -227,6 +238,8 @@ def test_only_fts_helper_uses_match():
 
 ## P4 — No orphan or staleness detection
 
+🔴 **Not shipped.** No `orphans` or `stale` tool exists; the writeback envelope carries no `corpus_health` field. Open work.
+
 ### Diagnosis
 
 An idea captured and never linked, annotated, or referenced becomes a dead node. The graph has no surface that says "these N ideas are aging without connections." `dump`, `list`, and `search` all rank by recency or relevance — they actively *hide* the orphan problem because dead ideas drop out of the recent window. The corpus accumulates rot silently.
@@ -278,6 +291,8 @@ Migration: none required — both detections are queries over existing tables.
 ---
 
 ## P5 — Cowork MCP host stringifies list-typed params
+
+✅ **Shipped v0.3.0** (commit `97fe87b`) — `StrList` annotated type in `util/types.py` bakes the coercion into the type system. Lint guard `test_lint.py::test_no_bare_list_str_in_inputs` enforces that no tool input model declares a bare `list[str]`.
 
 ### Diagnosis
 
@@ -339,6 +354,8 @@ def test_no_bare_list_str_in_inputs():
 
 ## P6 — Shallow deduplication
 
+✅ **Shipped v0.3.0** (migration `22b691f` adds `004_content_hash.sql`, capture rewrite in `0339bdb`) — content_hash column with partial index, hash-based dedup widened beyond the 5-second window, `dup_attempt` notes record collisions for provenance. The `possible_duplicates` writeback field from the structural guard was not adopted; the existing `annotate_candidates` envelope was deemed sufficient.
+
 ### Diagnosis
 
 The 5-second idempotency window in `capture_idea` (`tools/capture.py:87-93`) catches accidental double-fires of *byte-identical content from the same actor in the same scope*. It catches nothing else:
@@ -395,6 +412,8 @@ Two-part guard:
 ---
 
 ## P7 — No checkpoint-to-idea promotion
+
+✅ **Shipped v0.3.0** (commit `8b1d11a`) — `promote` tool mutates `kind` from `checkpoint` to `idea` while preserving the id; writes a `kind='promotion'` note recording the original `kind_label`. Reverse demotion explicitly not implemented. The `promotion_suggestion` writeback field from the structural guard was not adopted.
 
 ### Diagnosis
 
@@ -482,9 +501,14 @@ Two surfaces:
 
 ## Sequencing
 
-| Phase | Patterns | Migrations | Why this order |
+### Predicted vs. actual
+
+The original sequencing predicted a four-release cadence. Actual delivery collapsed five patterns into v0.3.0 (P1 immediate fix, P2 immediate fix, P3, P5, P6, P7) by treating the audit's "immediate fix" sections as one cohesive landing rather than per-pattern releases. The structural guards — the telemetry, alias, and corpus-health surfaces — are the open work.
+
+| Phase | Patterns | Migrations | Status |
 |---|---|---|---|
-| v0.3.0 | P3 (FTS sanitization), P5 (StrList type) | none | No schema risk. Biggest UX delta per LOC. Closes the discipline-on-the-model debt. |
-| v0.4.0 | P1 (configurable candidates + telemetry) | 004 | Largest token-cost reduction. Foundation for the writeback-as-steering-wheel pattern that P2/P4/P6/P7 all extend. |
-| v0.5.0 | P6 (content_hash dedup) + P7 (promote) | 006 | Both touch the kind/identity story. Promote is trivial once dedup's `possible_duplicates` surface exists. |
-| v0.6.0 | P2 (task_ref normalization + aliases) + P4 (orphan/stale) | 005 | Health surfaces. Both consume the writeback envelope built in v0.4. |
+| v0.3.0 | P1 (param), P2 (normalize), P3, P5, P6, P7 | `004_content_hash.sql` | ✅ Shipped |
+| v0.4.0 | Tool annotations, helper dedup, identifier normalization, eval suite (post-eval hygiene, not audit-driven) | none | ✅ Shipped |
+| _open_ | P1 structural guard (candidate utilization telemetry) | `004_candidate_telemetry.sql` (sketched) | 🔴 Not shipped |
+| _open_ | P2 structural guard (task_ref alias surface + `nearby_task_refs` writeback) | `005_task_ref_aliases.sql` (sketched) | 🔴 Not shipped |
+| _open_ | P4 (orphan / staleness detection + `corpus_health` envelope) | none required | 🔴 Not shipped |
